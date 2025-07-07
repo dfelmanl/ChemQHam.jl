@@ -1,0 +1,269 @@
+
+# Define a structure to hold chemical properties
+struct ChemProperties
+    h1e::AbstractArray{Float64}  # One-electron integrals
+    h2e::AbstractArray{Float64}  # Two-electron integrals
+    e_nuc::Float64               # Nuclear repulsion energy
+    
+    function ChemProperties(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}, e_nuc::Float64=0.0)
+        new(h1e, h2e, e_nuc)
+    end
+end
+
+# Define a single-site operator
+struct SiteOp
+    coefficient::Number
+    operator::String  # Operator type like "a↑", "c↓", etc. # TODO: Change to op_str
+    site::Int         # Site index
+    
+    # Constructor with coefficient
+    SiteOp(coef::Number, op::String, site::Int) = new(coef, op, site)
+    
+    # Default constructor with coefficient = 1.0
+    SiteOp(op::String, site::Int) = new(1.0, op, site)
+end
+
+# Define equality for SiteOp (ignoring coefficient, just comparing operator and site)
+function Base.:(==)(a::SiteOp, b::SiteOp)
+    return a.operator == b.operator && a.site == b.site
+end
+
+# Define hash for SiteOp (ignoring coefficient for hash as well)
+function Base.hash(op::SiteOp, h::UInt)
+    return hash(op.operator, hash(op.site, h))
+end
+
+# Define multiplication for SiteOp
+function Base.:*(a::Number, op::SiteOp)
+    # Returns a new SiteOp with multiplied coefficient
+    return SiteOp(a * op.coefficient, op.operator, op.site)
+end
+
+# Commutative multiplication
+function Base.:*(op::SiteOp, a::Number)
+    return a * op
+end
+
+# Define zero for SiteOp to be able to display it
+Base.zero(::Type{Vector{SiteOp}}) = Vector{SiteOp}()
+
+# Define a term in the operator sum
+struct OpTerm
+    coefficient::Number
+    operators::Vector{String}  # Operator types like "a↑", "c↓", etc.
+    sites::Vector{Int}         # Site indices
+    
+    function OpTerm(coef::Number, ops_sites...)
+        ops = String[]
+        sites = Int[]
+        
+        for i in 1:2:length(ops_sites)
+            push!(ops, ops_sites[i])
+            push!(sites, ops_sites[i+1])
+        end
+        
+        return new(coef, ops, sites)
+    end
+
+    function OpTerm(coefficient::Number, ops::Vector{String}, sites::Vector{Int})
+        if length(ops) != length(sites)
+            throw(ArgumentError("Operators and sites must have the same length"))
+        end
+        return new(coefficient, ops, sites)
+    end
+end
+
+function Base.:*(term::OpTerm, scalar::Number)
+    # Multiply the coefficient of the term by a scalar
+    return OpTerm(term.coefficient * scalar, term.operators, term.sites)
+end
+
+function Base.:*(scalar::Number, term::OpTerm)
+    # Commutative multiplication
+    return term * scalar
+end
+
+function Base.show(io::IO, term::OpTerm)
+    if isempty(term.operators)
+        print(io, "OpTerm($(term.coefficient), [], [])")
+        return
+    end
+    
+    # Group operators by site
+    site_ops = Dict{Int, Vector{String}}()
+    for (op, site) in zip(term.operators, term.sites)
+        if !haskey(site_ops, site)
+            site_ops[site] = String[]
+        end
+        push!(site_ops[site], op)
+    end
+    
+    # Sort sites for consistent ordering
+    sorted_sites = sort(collect(keys(site_ops)))
+    
+    # Build the formatted string
+    site_strings = String[]
+    for site in sorted_sites
+        ops_at_site = join(site_ops[site], " ")
+        push!(site_strings, "[ $ops_at_site ]_$site")
+    end
+    
+    # Join with arrows and add factor
+    formatted_term = join(site_strings, " ── ")
+    print(io, "$formatted_term    factor = $(term.coefficient)")
+end
+
+# ChemOpSum structure to collect and manage operator terms
+struct ChemOpSum
+    terms::Vector{OpTerm}
+    
+    ChemOpSum() = new(OpTerm[])
+    ChemOpSum(terms::Vector{OpTerm}) = new(terms)
+    ChemOpSum(term::OpTerm) = new([term])
+end
+
+# Add a term to the ChemOpSum
+function Base.:+(opsum::ChemOpSum, args)
+    if length(args) % 2 == 1 && !isa(args[1], Number)
+        throw(ArgumentError("Expected coefficient followed by operator/site pairs"))
+    end
+    
+    coef = args[1]
+    ops_sites = args[2:end]
+    
+    term = OpTerm(coef, ops_sites...)
+    push!(opsum.terms, term)
+    
+    return opsum
+end
+
+function Base.:+(opsum::ChemOpSum, term::OpTerm)
+    # Add a single OpTerm to the ChemOpSum
+    push!(opsum.terms, term)
+    return opsum
+end
+
+function Base.:+(opsum::ChemOpSum, terms::Vector{OpTerm})
+    # Add multiple OpTerms to the ChemOpSum
+    for term in terms
+        push!(opsum.terms, term)
+    end
+    return opsum
+end
+
+function Base.:+(opsum1::ChemOpSum, opsum2::ChemOpSum)
+    # Combine two OpSums
+    new_terms = vcat(opsum1.terms, opsum2.terms)
+    return ChemOpSum(new_terms)
+end
+
+function Base.:*(opsum::ChemOpSum, scalar::Number)
+    # Multiply all terms in the ChemOpSum by a scalar
+    new_terms = [term * scalar for term in opsum.terms]
+    return ChemOpSum(new_terms)
+end
+
+Base.:*(scalar::Number, opsum::ChemOpSum) = opsum * scalar
+
+# Iterator interface for ChemOpSum
+Base.getindex(ops::ChemOpSum, i::Int) = ops.terms[i]
+Base.getindex(ops::ChemOpSum, r::AbstractRange) = ChemOpSum(ops.terms[r])
+Base.getindex(ops::ChemOpSum, indices) = ChemOpSum(ops.terms[collect(indices)])
+Base.iterate(ops::ChemOpSum) = isempty(ops.terms) ? nothing : (ops.terms[1], 1)
+Base.keys(ops::ChemOpSum) = 1:length(ops.terms)
+Base.iterate(ops::ChemOpSum, state) = state >= length(ops.terms) ? nothing : (ops.terms[state+1], state+1)
+Base.length(ops::ChemOpSum) = length(ops.terms)
+Base.eltype(::Type{ChemOpSum}) = OpTerm
+
+function Base.show(io::IO, ops::ChemOpSum)
+    if isempty(ops.terms)
+        print(io, "ChemOpSum: (empty)")
+    else
+        print(io, "ChemOpSum with $(length(ops.terms)) terms:\n")
+        for (i, term) in enumerate(ops.terms)
+            print(io, "  $i. ")
+            show(io, term)
+            if i < length(ops.terms)
+                print(io, "\n")
+            end
+        end
+    end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", ops::ChemOpSum)
+    show(io, ops)
+end
+
+
+gen_ChemOpSum(chem_data::ChemProperties, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(chem_data::ChemProperties; ord=ord, kwargs...)
+gen_ChemOpSum(chem_data::ChemProperties; n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=false, add_nuc::Bool=true) = gen_ChemOpSum(chem_data.h1e, chem_data.h2e, chem_data.e_nuc; n_sites=n_sites, ord=ord, tol=tol, spin_symm=spin_symm, add_nuc=add_nuc)
+gen_ChemOpSum(h1e, h2e, e_nuc; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, kwargs...)
+gen_ChemOpSum(h1e, h2e, e_nuc, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, ord=ord, kwargs...)
+gen_ChemOpSum(h1e, h2e, e_nuc, n_sites::Int; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, n_sites=n_sites, kwargs...)
+
+function gen_ChemOpSum(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; e_nuc=0.0, n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=false, add_nuc::Bool=true)
+    add_nuc || (e_nuc = 0.0)  # If add_nuc is false, set nuclear energy to 0
+    if isnothing(ord)
+        if n_sites > 0
+            @assert size(h1e, 1) >= n_sites "Provided h1e size $(size(h1e)) does not match n_sites $(n_sites)"
+            ord = collect(1:n_sites)  # Default ordering if n_sites is specified
+        else
+            ord = collect(1:size(h1e, 1))  # Default ordering if no specific ordering is provided
+        end
+    else
+        # Ensure ord is a valid vector of integers
+        @assert length(ord) >= n_sites "Provided ord length $(length(ord)) is lower than n_sites $(n_sites)"
+        (n_sites > 0) && (ord = ord[1:n_sites])  # Truncate or use the provided order
+    end
+
+    # Generate the ChemOpSum object from the Hamiltonian coefficients
+    if spin_symm
+        # return _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=tol) # Unprocessed h1e and h2e
+        return _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=tol) # Always assume that h1e and h2e are already processed when they are passed to gen_ChemOpSum?
+    else
+        # return _gen_OpSum_noSpinSymm(h1e, h2e, e_nuc, ord; tol=tol)
+        return _gen_OpSum_noSpinSymm(h1e, h2e, e_nuc, ord; tol=tol)
+    end
+end
+
+# Generate the ChemOpSum object from the Hamiltonian coefficients:
+function _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
+    N_spt = length(ord)
+
+    os = ChemOpSum()
+
+    # Nuclear energy term
+    if e_nuc != 0.0
+        # Add the nuclear energy term as an identity operator on all sites
+        os += e_nuc, ["I"], [0]
+    end
+
+    # One-interaction terms
+    for p = 1:N_spt, q = 1:N_spt
+        cf = h1e[ord[p], ord[q]] #* parity_sign([p, q])
+
+        if abs(cf) >= tol
+            if p + q - 1 <= N_spt # TODO: Check if it improves performance because of the bipartite grouping 
+                os += cf, "a1", p, "c1", q  # Spin-up operators
+            else
+                os += cf, "a2", p, "c2", q  # Spin-down operators
+            end
+        end
+    end
+
+    # Two-interactions terms
+    for p = 1:N_spt, q = 1:N_spt, r = 1:N_spt, s = 1:N_spt
+
+        cf = h2e[ord[p], ord[q], ord[r], ord[s]] # * parity_sign([p, q, r, s]) # is it the same as parity_sign([p, q, r, s])?
+
+        if abs(cf) >= tol
+            os += cf, "a1", p, "a2", q, "c2", r, "c1", s
+        end
+    end
+    return os
+end
+
+
+function _gen_OpSum_noSpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
+    throw(ErrorException("ChemOpSum generation without spin symmetry is not supported yet. Use _gen_OpSum_SpinSymm instead."))
+end

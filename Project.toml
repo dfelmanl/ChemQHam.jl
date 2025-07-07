@@ -1,0 +1,6 @@
+[deps]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
+ITensorChemistry = "cbb729c8-cb01-4982-b6b1-bc32521fc628"
+ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
+ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"

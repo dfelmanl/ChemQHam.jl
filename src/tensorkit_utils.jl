@@ -33,11 +33,11 @@ Get the appropriate quantum number parser function based on the symmetry type st
 - Throws an error if the symmetry type is not supported
 """
 function QNParser(symm::String)
-    if symm == "(FermionParity ⊠ Irrep[U₁])" || lowercase(symm) == "u1"
+    if symm == "(FermionParity ⊠ Irrep[U₁])" || uppercase(symm) == "U1"
         return fNumberQNParser
-    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])" || lowercase(symm) == "u1u1"
+    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])" || uppercase(symm) == "U1U1"
         return U1U1QNParser
-    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])" || lowercase(symm) in ("su2", "u1su2")
+    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])" || uppercase(symm) == "U1SU2"
         return SU2doubleQNParser
     else
         error("Unsupported quantum number representation: $symm")
@@ -97,14 +97,34 @@ end
 @addSpinIteratorCapability U1U1QNParser
 @addSpinIteratorCapability SU2doubleQNParser
 
+function get_qn_type(symm::String)
+    """
+    Get the quantum number type based on the symmetry type string representation.
+    
+    Parameters:
+    - symm::String: String representation of the symmetry type
+    
+    Returns:
+    - The quantum number type as a Tuple
+    """
+    if symm == "(FermionParity ⊠ Irrep[U₁])" || uppercase(symm) == "U1"
+        return Tuple{Bool, Int}
+    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])" || uppercase(symm) == "U1U1"
+        return Tuple{Bool, Int, Int}
+    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])" || uppercase(symm) == "U1SU2"
+        return Tuple{Bool, Int, Rational{Int64}}
+    else
+        error("Unsupported quantum number representation: $symm")
+    end
+end
 
-function get_QN_mapping_and_vs_multiplicity(virt_spaces_U1U1, qn_parser; symm="(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])")
-    if symm == "(FermionParity ⊠ Irrep[U₁])"
+function get_QN_mapping_and_vs_multiplicity(virt_spaces_U1U1, qn_parser; symm="U1SU2")
+    if symm == "(FermionParity ⊠ Irrep[U₁])" || uppercase(symm) == "U1"
         error("get_QN_mapping_and_vs_multiplicity for (FermionParity ⊠ Irrep[U₁]) has not been implemented yet.")
         return get_QN_mapping_and_vs_multiplicity_non_spin_symmetric(virt_spaces_U1U1, qn_parser)
-    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])"
+    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])" || uppercase(symm) == "U1U1"
         return get_QN_mapping_and_vs_multiplicity_non_spin_symmetric(virt_spaces_U1U1, qn_parser)
-    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])"
+    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])" || uppercase(symm) == "U1SU2"
         return get_symmQN_mapping_and_vs_SU2(virt_spaces_U1U1, qn_parser)
     else
         error("Unsupported quantum number representation: $symm")
@@ -223,7 +243,7 @@ function construct_empty_mpo_site(phySpace::GradedSpace, left_qn_mult::Dict{QN, 
     return zeros(dataType, virtSpace_left ⊗ phySpace ← virtSpace_right ⊗ phySpace)
 end
 
-function GetCrAnLocalOpsU1U1(phySpace; dataType::DataType=Float64, spin_symm::Bool=false)
+function GetCrAnLocalOpsU1U1(; dataType::DataType=Float64, spin_symm::Bool=false)
     """ Generate local operators for the Hamiltonian """
     # TOCHECK: Should they be defined as the adjoint conjugate? Is that why SpinUp and SpinDown are reversed?
     # Creation and annilihation operator for spin-1/2 multiplet (spinUp and spinDown)
@@ -296,6 +316,8 @@ function GetCrAnLocalOpsU1U1(phySpace; dataType::DataType=Float64, spin_symm::Bo
         anDownMat[vOut, pOut, vIn, pIn] = vFactor * pFactor
     end
 
+    phySpace = genPhySpace("U1U1")
+
     idOp = localIdOp(phySpace, auxVecSpace; dataType=dataType)
     if spin_symm
         # Symmetric operators
@@ -316,7 +338,7 @@ function GetCrAnLocalOpsU1U1(phySpace; dataType::DataType=Float64, spin_symm::Bo
     return local_ops
 end
 
-function GetCrAnLocalOpsU1SU2(phySpace; dataType::DataType=Float64)
+function GetCrAnLocalOpsU1SU2(; dataType::DataType=Float64)
     """ Generate local operators for the Hamiltonian """
     # TOCHECK: Should they be defined as the adjoint conjugate? Is that why SpinUp and SpinDown are reversed?
     # Creation and annilihation operator for spin-1/2 multiplet (spinUp and spinDown)
@@ -351,8 +373,7 @@ function GetCrAnLocalOpsU1SU2(phySpace; dataType::DataType=Float64)
     # New Convention + 3rd multiplicity on (0,0,0) to even the probabilities when constracting on the same site
     auxVecSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0)=>2, (0, 0, 1)=>1, (1, 1, 1/2)=>2, (1, -1, 1/2)=>2, (0, 2, 0)=>1, (0, -2, 0)=>1, (0, 2, 1)=>1, (0, -2, 1)=>1)
 
-    ftree_type = FusionTree{sectortype(typeof(phySpace))}
-
+    
     # CREATION OPERATOR
 
     # New Convention + 2 multiplicities for (1,+-1,1//2)
@@ -374,8 +395,10 @@ function GetCrAnLocalOpsU1SU2(phySpace; dataType::DataType=Float64)
         ((((0, 0, 1.0), (0, 2, 0.0)), (0, 2, 1.0), (false, false), ()), (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()), [0 -1.0])
         ((((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()), (((0, 2, 0.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()), [0; 1/sqrt(2)])
         ((((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()), (((0, 2, 1.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()), [0; sqrt(3/2)])
-    ]
-
+        ]
+    
+    phySpace = genPhySpace("U1SU2")
+    ftree_type = FusionTree{sectortype(typeof(phySpace))}
     crOp = zeros(dataType, auxVecSpace ⊗ phySpace, auxVecSpace ⊗ phySpace)
     # TODO: Check how can this be inherently defined. Maybe this forces the convention to be changed
     for (f1, f2, ftree_array) in crOp_ftree_nzdata
@@ -662,25 +685,23 @@ struct Op2Data{T}
     ops::AbstractLocalOps{Float64}
     symm::String
     
-    function Op2Data(phySpace, QNType, spin_symm::Bool)
-        # Define the OpDataDict type
+    function Op2Data(symm::String)
         
+        if symm == "U1U1"
+            ops = GetCrAnLocalOpsU1U1(spin_symm=false)
+        elseif symm == "U1SU2"
+            # spin_symm is irrelevant, as SU2 is inherently spin symmetric. Add a warning?
+            ops = GetCrAnLocalOpsU1SU2()
+            ops = LocalOps_DoubleV(ops)
+        else
+            throw(ArgumentError("Unsupported symmetry: $symm. Supported symmetries are: 'U1U1', 'U1SU2'."))
+        end
+
+        # Define the OpDataDict type
+        QNType = get_qn_type(symm)
         OpDataDict = Dict{String, Dict{Tuple{QNType, QNType}, Vector{FusionTreeDataType(QNType)}}}
 
-        # Get the local operators based on the sector type of the physical space
-        sector_type = TensorKit.type_repr(sectortype(phySpace))
-        if sector_type in ("(FermionParity ⊠ U1Irrep ⊠ U1Irrep)", "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])")
-            ops = GetCrAnLocalOpsU1U1(phySpace, spin_symm=spin_symm)
-            symm = "u1u1"
-        elseif sector_type in ("(FermionParity ⊠ U1Irrep ⊠ SU2Irrep)", "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])")
-            # spin_symm is irrelevant, as SU2 is inherently spin symmetric. Add a warning?
-            ops = GetCrAnLocalOpsU1SU2(phySpace)
-            ops_doubleV = LocalOps_DoubleV(ops)
-            symm = "u1su2"
-        else
-            throw(ArgumentError("Unsupported sector type: $sector_type"))
-        end
-        return new{OpDataDict}(OpDataDict(), ops_doubleV, symm)
+        return new{OpDataDict}(OpDataDict(), ops, symm)
     end
 end
 
@@ -738,18 +759,10 @@ function construct_op_TensorMap(op2data::Op2Data, op_str::String)
         # Identity operator
         return op2data.ops["I"]
     end
-    if op2data.symm == "u1su2"
-        if any(c -> c in "12", op_str)
-            op_TM = reduce(*, [op2data.ops[join(collect(op_str)[i:i+1])] for i in reverse(1:2:length(op_str))])
-        elseif any(c -> c in "↑↓", op_str)
-            # Spin symmetric operators are constructed without taking the spin labels into account
-            # For example, "a↑c↑" or "a↓c↓" will be constructed as "ac"
-            op_TM = reduce(*, [op2data.ops[string(collect(op_str)[i])] for i in reverse(1:2:length(op_str))])
-        else
-            # String is already in the form of "ac", "ca", etc. Without spin labels
-            op_TM = reduce(*, [op2data.ops[string(char)] for char in reverse(op_str)])
-        end
-    elseif op2data.symm == "u1u1"
+    if op2data.symm == "U1SU2"
+        op_TM = reduce(*, [op2data.ops[join(collect(op_str)[i:i+1])] for i in reverse(1:2:length(op_str))])
+    elseif op2data.symm == "U1U1"
+        # This assumes GetCrAnLocalOpsU1U1(spin_symm=false), as the operators are defined with a spin character as "c↑", "c↓", "a↑", "a↓"
         op_TM = reduce(*, [op2data.ops[join(collect(op_str)[i:i+1])] for i in reverse(1:2:length(op_str))])
     else
         throw(ArgumentError("Unsupported symmetry: $(op2data.symm)"))
@@ -760,7 +773,7 @@ end
 
 
 
-function fill_mpo_site_SU2!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=true)
+function fill_mpo_site_SU2!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=false)
 
     for (row, col, ops) in zip(findnz(symb_mpo_site)...)
 
@@ -778,10 +791,7 @@ function fill_mpo_site_SU2!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, 
                         f2 = ftree_type(ftree_right...)
 
                         verbose && println("Filling MPO site for operator: $op, op_str $op_str, left QN: $left_qn, left_op_mult: $left_op_mult, right QN: $right_qn, right_op_mult: $right_op_mult left_mult: $left_MPOsite_mult, right_mult: $right_MPOsite_mult, ftree_left: $ftree_left, ftree_right: $ftree_right, val: $val, val[left_op_mult, right_op_mult]: $(val[left_op_mult, right_op_mult]),  coef: $(op.coefficient)")
-                        mpo_site[f1,f2][left_MPOsite_mult, 1, right_MPOsite_mult, 1] += val[left_op_mult, right_op_mult] * op.coefficient # We should be filling the mpo_site[f1,f2][mult_left,:,mult_right,:] combination twice due to symmetry
-                        # mpo_site[f1,f2][mult_left,:,mult_right,:] .= val * coef # This is the original line, but we need to check for symmetry, as we should be filling the mpo_site[f1,f2][mult_left,:,mult_right,:] combination twice
-                        
-                        # @assert length(mpo_site[f1,f2][left_mult,:,right_mult,:]) == 1 # Remove when the MPO construction is stable. This is a sanity check to ensure that the MPO site has the expected shape.
+                        mpo_site[f1,f2][left_MPOsite_mult, 1, right_MPOsite_mult, 1] += val[left_op_mult, right_op_mult] * op.coefficient
                     end
                 end
             end
@@ -791,7 +801,7 @@ function fill_mpo_site_SU2!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, 
 
 end
 
-function fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type, spin_symm)
+function fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; spin_symm::Bool=false, verbose::Bool=false)
 
     for (row, col, ops) in zip(findnz(symb_mpo_site)...)
         (left_qn, left_mult) = vs_map_left[row]
@@ -800,6 +810,7 @@ function fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right,
         for op in ops
 
             if spin_symm
+                throw(NotImplementedError("Spin symmetry is not implemented for U1U1 operators. Choose spin_symm=false."))
                 # TODO: Check if this is needed or if there is a better way to handle the operator string for U1U1
                 op_str = op.operator == "I" ? "I" : join([collect(op.operator)[i] for i in 1:2:length(op.operator)]) # Remove the spin labels from the operator string
             else
@@ -816,38 +827,37 @@ function fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right,
                 f1 = ftree_type(ftree_left...)
                 f2 = ftree_type(ftree_right...)
 
-                # println("Filling MPO site for operator: $op, op_str $op_str, left QN: $left_qn, right QN: $right_qn, left_mult: $left_mult, right_mult: $right_mult, ftree_left: $ftree_left, ftree_right: $ftree_right, value: $val, coef: $(op.coefficient)")
-                mpo_site[f1,f2][left_mult,:,right_mult,:] .+= val * op.coefficient # We should be filling the mpo_site[f1,f2][mult_left,:,mult_right,:] combination twice due to symmetry
-                # mpo_site[f1,f2][mult_left,:,mult_right,:] .= val * coef # This is the original line, but we need to check for symmetry, as we should be filling the mpo_site[f1,f2][mult_left,:,mult_right,:] combination twice
+                verbose && println("Filling MPO site for operator: $op, op_str $op_str, left QN: $left_qn, right QN: $right_qn, left_mult: $left_mult, right_mult: $right_mult, ftree_left: $ftree_left, ftree_right: $ftree_right, value: $val, coef: $(op.coefficient)")
+                mpo_site[f1,f2][left_mult,:,right_mult,:] .+= val * op.coefficient
                 
-                @assert length(mpo_site[f1,f2][left_mult,:,right_mult,:]) == 1 # Remove when the MPO construction is stable. This is a sanity check to ensure that the MPO site has the expected shape.
             end
         end
     end
 
 end
 
-
-function symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, phySpace::GradedSpace; spin_symm::Bool=false, dataType::DataType=Float64, verbose=true)
-    # TODO: Remove spin_symm parameter when the MPO construction is stable. It should always be false for U1U1 and true for U1SU2.
-
-    mpo_sites = Vector{TensorMap}(undef, length(symbolic_mpo)) # Allocate TensorMap with the already known properties (type, shape, etc.)
-    phySpace_dim = TensorKit.dim(phySpace)
-    @assert phySpace_dim == 4
-    symm = TensorKit.type_repr(sectortype(phySpace))
-    qn_parser = QNParser(symm)
-
-    if true # CURRENT PLACEHOLDER
-        # For U1SU2
-        QNType = typeof(qn_parser(0,0)[1]) # For double virtual spaces, the QNType is the quantum number type of any of the virtual spaces, as they get fused together
+function validate_symmetry(symm)
+    if uppercase(symm) == "U1U1"
+        return "U1U1"
+    elseif uppercase(symm) == "U1SU2"
+        return "U1SU2"
     else
-        # For U1U1
-        QNType = typeof(qn_parser(0,0))
+        throw(ArgumentError("Unsupported symmetry type: $symm. Supported types are 'U1U1' and 'U1SU2'."))
     end
+end
+
+symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm::String; kwargs...) = _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, validate_symmetry(symm); kwargs...)
+
+function _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm::String; dataType::DataType=Float64, verbose=false)
+    # TODO: Remove spin_symm parameter when the MPO construction is stable. It should always be false for U1U1 and true for U1SU2.
+    
+    mpo_sites = Vector{TensorMap}(undef, length(symbolic_mpo)) # Allocate TensorMap with the already known properties (type, shape, etc.)
+    qn_parser = QNParser(symm)
 
     qn_vs_maps, qn_mult_counts = get_QN_mapping_and_vs_multiplicity(virt_spaces, qn_parser; symm=symm)
 
-    op2data = Op2Data(phySpace, QNType, spin_symm)
+    op2data = Op2Data(symm)
+    phySpace = genPhySpace(symm)
     ftree_type = FusionTree{sectortype(phySpace)}
 
     for (isite, symb_mpo_site) in enumerate(symbolic_mpo)
@@ -858,10 +868,10 @@ function symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, phySpace::GradedSp
         vs_map_left = qn_vs_maps[isite]
         vs_map_right = qn_vs_maps[isite+1]
         
-        if symm in ("(FermionParity ⊠ U1Irrep ⊠ SU2Irrep)", "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])")
+        if symm == "U1SU2"
             fill_mpo_site_SU2!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=verbose)
-        elseif symm in ("(FermionParity ⊠ U1Irrep ⊠ U1Irrep)", "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])")
-            fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type, spin_symm)
+        elseif symm == "U1U1"
+            fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=verbose)
         else
             throw(ArgumentError("Unsupported symmetry type: $symm"))
         end
@@ -869,10 +879,7 @@ function symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, phySpace::GradedSp
         mpo_sites[isite] = mpo_site
     end
 
-    # Create the final MPO object
-    mpo = SparseMPO([mpo_sites...])
-    
-    return mpo
+    return mpo_sites
 end
 
 
@@ -921,15 +928,15 @@ Generate the physical space based on the given symmetry type `symm`.
 function genPhySpace(symm)
     # FermionParity must always be imposed
     
-    if lowercase(symm) == "u1"
+    if uppercase(symm) == "U1"
         orbPhysSpace = Vect[(FermionParity ⊠ Irrep[U₁])]((0, 0) => 1, (1, 1) => 2, (0, 2) => 1)
-    elseif lowercase(symm) == "u1u1"
+    elseif uppercase(symm) == "U1U1"
         # (fParity, total count, spin count)
         orbPhysSpace = Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (1, 1, -1 // 2) => 1, (0, 2, 0) => 1)
-    elseif lowercase(symm) == "su2"
+    elseif uppercase(symm) == "U1SU2"
         orbPhysSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (0, 2, 0) => 1)
     else
-        throw(ArgumentError("The specified symmetry type '$symm' is not implemented. The current options are: 'U1', 'Par', and 'SU2'"))
+        throw(ArgumentError("The specified symmetry type '$symm' is not implemented. The current options are: 'U1', 'U1U1', and 'U1SU2'"))
     end
 
     return orbPhysSpace

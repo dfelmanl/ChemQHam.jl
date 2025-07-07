@@ -1,7 +1,6 @@
 using ITensorChemistry: Molecule, molecular_orbital_hamiltonian
 
-function ITChem_opsum(n_sites; idx_factor_list=nothing, it_terms_range=nothing, ops_tol=1e-8, ops_factor=1.0)
-    molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
+function ITChem_opsum(molecule::Molecule; n_sites::Int=0, idx_factor_list=nothing, it_terms_range=nothing, ops_tol=1e-8, ops_factor=1.0)
     ham_info = molecular_orbital_hamiltonian(molecule; basis="sto-3g", atol=ops_tol, n_sites=n_sites)
     opsum = ham_info.hamiltonian
     if !isnothing(idx_factor_list)

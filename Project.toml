@@ -1,6 +1,28 @@
+name = "ChemQHam"
+uuid = "0596a194-2a76-4640-acfb-c990dee9b264"
+authors = ["Daniel Felman <dfelmanl@gmail.com>"]
+version = "0.1.0"
+
 [deps]
+CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
+HTTN = "bb6aff34-4030-486e-91bc-b5b01747fa41"
 ITensorChemistry = "cbb729c8-cb01-4982-b6b1-bc32521fc628"
 ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
 ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+TensorKit = "07d1fe3e-3e46-537d-9eac-e9e13d0d4cec"
+
+[compat]
+CondaPkg = "0.2.29"
+DataStructures = "0.18.22"
+HTTN = "1.0.0"
+ITensorChemistry = "0.1.1"
+ITensorMPS = "0.3.6"
+LinearAlgebra = "1.11.0"
+PythonCall = "0.9.25"
+SparseArrays = "1.11.0"
+TensorKit = "0.14.6"
+julia = "1.6"

@@ -1,6 +1,7 @@
 
 # Convert ChemOpSum terms to an operator table (similar to Renormalizer's _terms_to_table)
-function terms_to_table(n_sites::Int, terms::ChemOpSum)
+function terms_to_table(terms::ChemOpSum; n_sites::Int=0)
+    n_sites = n_sites > 0 ? n_sites : maximum(maximum.(getfield.(terms, :sites)))  # Determine number of sites if not provided
     # TODO: Allow to get only `terms` and extract the number of sites from the terms themselves (maximum site location number).
     table = Vector{Vector{Int}}()
     

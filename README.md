@@ -11,3 +11,34 @@ A Julia package for optimal quantum chemistry Hamiltonian construction in matrix
 - **TensorKit Integration**: Convert to TensorKit tensor network format with symmetry support
 - **fZ⊗U₁⊗SU₂ Symmetry**: Currently supports U₁ particle number ⊗ SU₂ spin rotation symmetry on top of the fundamental fermionic parity
 - **ITensor Compatibility**: Interface with ITensorMPS and ITensorChemistry for testing
+
+## Quick Start Example
+
+```julia
+using Revise
+using Pkg
+Pkg.activate("..")
+Pkg.instantiate()
+Pkg.resolve()
+
+include("../src/ChemQHam.jl")
+using .ChemQHam
+
+# Define the molecule
+molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
+
+# Define the symmetry. Currently only U1SU2 is supported.
+symm = "U1SU2"
+
+# Generate molecular integrals
+h1e, h2e, nuc_e = molecular_interaction_coefficients(molecule)
+
+# Convert to chemical operator sum
+op_terms = gen_ChemOpSum(h1e, h2e, nuc_e; tol=1e-8, spin_symm=true)
+
+# Construct optimized symbolic MPO
+symbolic_mpo, virt_spaces = construct_symbolic_mpo(op_terms)
+
+# Convert to TensorKit MPO with symmetry
+mpo = symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm)
+```

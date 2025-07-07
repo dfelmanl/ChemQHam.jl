@@ -196,12 +196,12 @@ end
 
 
 gen_ChemOpSum(chem_data::ChemProperties, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(chem_data::ChemProperties; ord=ord, kwargs...)
-gen_ChemOpSum(chem_data::ChemProperties; n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=false, add_nuc::Bool=true) = gen_ChemOpSum(chem_data.h1e, chem_data.h2e, chem_data.e_nuc; n_sites=n_sites, ord=ord, tol=tol, spin_symm=spin_symm, add_nuc=add_nuc)
+gen_ChemOpSum(chem_data::ChemProperties; n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=true, add_nuc::Bool=true) = gen_ChemOpSum(chem_data.h1e, chem_data.h2e, chem_data.e_nuc; n_sites=n_sites, ord=ord, tol=tol, spin_symm=spin_symm, add_nuc=add_nuc)
 gen_ChemOpSum(h1e, h2e, e_nuc; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, kwargs...)
 gen_ChemOpSum(h1e, h2e, e_nuc, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, ord=ord, kwargs...)
 gen_ChemOpSum(h1e, h2e, e_nuc, n_sites::Int; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, n_sites=n_sites, kwargs...)
 
-function gen_ChemOpSum(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; e_nuc=0.0, n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=false, add_nuc::Bool=true)
+function gen_ChemOpSum(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; e_nuc=0.0, n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=true, add_nuc::Bool=true)
     add_nuc || (e_nuc = 0.0)  # If add_nuc is false, set nuclear energy to 0
     if isnothing(ord)
         if n_sites > 0
@@ -265,5 +265,5 @@ end
 
 
 function _gen_OpSum_noSpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
-    throw(ErrorException("ChemOpSum generation without spin symmetry is not supported yet. Use _gen_OpSum_SpinSymm instead."))
+    throw(ErrorException("ChemOpSum generation without spin symmetry is not supported yet. Choose spin_symm=true instead."))
 end

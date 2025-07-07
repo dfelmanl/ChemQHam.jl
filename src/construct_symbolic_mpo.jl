@@ -79,7 +79,7 @@ The local mpo is the transformation matrix between 0',1',2' to 0'',1''
 The local mpo is the transformation matrix between 0'',1'' to 0'''
 
 """
-function construct_symbolic_mpo(table, primary_ops, factor; algo="Hungarian", verbose=true)
+function construct_symbolic_mpo(table, primary_ops, factor; algo="Hungarian", verbose=false)
 
     n_sites = size(table, 2)
     
@@ -139,6 +139,11 @@ function construct_symbolic_mpo(table, primary_ops, factor; algo="Hungarian", ve
     verbose && println("symbolic MPO's bond dimensions: $([length(vs) for vs in mpoVs])")
     
     return symbolic_mpo, mpoVs
+end
+
+function construct_symbolic_mpo(op_terms::ChemOpSum; kwargs...)
+    table, primary_ops, factors = terms_to_table(op_terms)
+    return construct_symbolic_mpo(table, primary_ops, factors; kwargs...)
 end
 
 function construct_symbolic_mpo(chem_data, ord; ops_tol=1e-14, maxdim=2^30, algo="Hungarian", spin_symm::Bool=false, verbose=false)

@@ -12,7 +12,8 @@ function ITChem_opsum(molecule::Molecule; n_sites::Int=0, idx_factor_list=nothin
     return (opsum=opsum, h1e=ham_info.h1e, h2e=ham_info.h2e, nuc_e=ham_info.nuclear_energy)
 end
 
-function ITChem_mat(opsum, n_sites; ham_tol=1e-10, ham_maxdim=10000)
+function ITChem_mat(opsum; n_sites=0, ham_tol=1e-10, ham_maxdim=10000)
+    n_sites = n_sites > 0 ? n_sites : maximum(site_op.sites[1] for op_term in opsum.args[1] for site_op in op_term.args[2])
     sites = siteinds("Electron", n_sites; conserve_qns=true)
     H_mpo = ITensorMPS.MPO(opsum, sites, cutoff=ham_tol, maxdim=ham_maxdim)
     H_tens = reduce(*, H_mpo);

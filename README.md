@@ -8,22 +8,23 @@ A Julia package for optimal quantum chemistry Hamiltonian construction in matrix
 
 - **Chemical Operator Sum Generation**: Convert quantum chemistry integrals to operator sums
 - **Optimized MPO Construction**: Uses bipartite graph theory methods for minimal bond dimension
-- **Mininal Hamiltonian terms**: Takes advantage of the symmetry in the two-electron interaction coefficients
+- **Minimal Hamiltonian terms**: Takes advantage of the symmetry in the two-electron interaction coefficients
 - **TensorKit Integration**: Convert to TensorKit tensor network format with symmetry support
 - **fZ⊗U₁⊗SU₂ Symmetry**: Currently supports U₁ particle number ⊗ SU₂ spin rotation symmetry on top of the fundamental fermionic parity
 - **ITensor Compatibility**: Interface with ITensorMPS and ITensorChemistry for testing
 
+## Installation
+
+```bash
+julia> using Pkg
+
+julia> Pkg.add(; url="https://github.com/dfelmanl/ChemQHam.jl")
+```
+
 ## Quick Start Example
 
 ```julia
-using Revise
-using Pkg
-Pkg.activate("..")
-Pkg.instantiate()
-Pkg.resolve()
-
-include("../src/ChemQHam.jl")
-using .ChemQHam
+using ChemQHam
 
 # Define the molecule
 molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])

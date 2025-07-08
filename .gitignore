@@ -16,3 +16,6 @@ deps/deps.jl
 # OS
 .DS_Store
 Thumbs.db
+
+# Notebooks
+notebooks/test.ipynb

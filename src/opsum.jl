@@ -83,6 +83,11 @@ function Base.:*(scalar::Number, term::OpTerm)
     return term * scalar
 end
 
+function Base.:/(term::OpTerm, scalar::Number)
+    # Divide the coefficient of the term by a scalar
+    return OpTerm(term.coefficient / scalar, term.operators, term.sites)
+end
+
 function Base.show(io::IO, term::OpTerm)
     if isempty(term.operators)
         print(io, "OpTerm($(term.coefficient), [], [])")
@@ -240,7 +245,7 @@ function _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
 
     # One-interaction terms
     for p = 1:N_spt, q = 1:N_spt
-        cf = h1e[ord[p], ord[q]] #* parity_sign([p, q])
+        cf = h1e[ord[p], ord[q]]
 
         if abs(cf) >= tol
             if p + q - 1 <= N_spt # TODO: Check if it improves performance because of the bipartite grouping 
@@ -252,12 +257,22 @@ function _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
     end
 
     # Two-interactions terms
-    for p = 1:N_spt, q = 1:N_spt, r = 1:N_spt, s = 1:N_spt
+    for p = 1:N_spt, q = p:N_spt, r = 1:N_spt
+        if p == q
+            s_start = r
+        else
+            s_start = 1
+        end
+        for s = s_start:N_spt
 
-        cf = h2e[ord[p], ord[q], ord[r], ord[s]] # * parity_sign([p, q, r, s]) # is it the same as parity_sign([p, q, r, s])?
+            cf = h2e[ord[p], ord[q], ord[r], ord[s]]
 
-        if abs(cf) >= tol
-            os += cf, "a1", p, "a2", q, "c2", r, "c1", s
+            if abs(cf) >= tol
+                if !(p == q && r == s)
+                    cf *= 2
+                end
+                os += cf, "a1", p, "a2", q, "c2", r, "c1", s
+            end
         end
     end
     return os

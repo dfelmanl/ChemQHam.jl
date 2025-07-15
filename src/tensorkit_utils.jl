@@ -1,101 +1,4 @@
-import TensorKit: ⊕
-
-"""
-    QNParser(phySpace::GradedSpace)
-
-Convert a `GradedSpace` to an appropriate quantum number parser function.
-Returns a function that can parse spin-up and spin-down occupation numbers into the appropriate quantum number representation.
-
-# Arguments
-- `phySpace::GradedSpace`: The graded space defining the symmetry type
-
-# Returns
-- A function that converts spin occupation numbers to quantum numbers
-"""
-QNParser(phySpace::GradedSpace) = QNParser(TensorKit.type_repr(sectortype(phySpace)))
-
-"""
-    QNParser(symm::String)
-
-Get the appropriate quantum number parser function based on the symmetry type string representation.
-
-# Arguments
-- `symm::String`: String representation of the symmetry type
-
-# Returns
-- A function that converts spin occupation numbers to quantum numbers
-
-# Supported symmetry types
-- "(FermionParity ⊠ Irrep[U₁]": Uses fermion number conservation
-- "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])": Uses Z₂ ⊠ U₁ ⊠ SU₂ symmetry
-
-# Errors
-- Throws an error if the symmetry type is not supported
-"""
-function QNParser(symm::String)
-    if symm == "(FermionParity ⊠ Irrep[U₁])" || uppercase(symm) == "U1"
-        return fNumberQNParser
-    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])" || uppercase(symm) == "U1U1"
-        return U1U1QNParser
-    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])" || uppercase(symm) == "U1SU2"
-        return SU2doubleQNParser
-    else
-        error("Unsupported quantum number representation: $symm")
-    end
-end
-
-"""
-    fNumberQNParser(spinUp::Int, spinDown::Int)
-
-Convert spin-up and spin-down occupation numbers to a quantum number with fermion number conservation.
-
-# Arguments
-- `spinUp::Int`: Number of spin-up electrons
-- `spinDown::Int`: Number of spin-down electrons
-
-# Returns
-- A Tuple with (Z₂ fermionic parity, U₁ total particles) quantum numbers
-"""
-function fNumberQNParser(spinUp::Int, spinDown::Int)
-    u1 = spinUp + spinDown
-    f = abs(u1) % 2
-    return (f, u1)
-end
-
-
-function U1U1QNParser(spinUp::Int, spinDown::Int)
-    total_cnt = spinUp + spinDown
-    f = abs(total_cnt) % 2
-    total_spin = (spinUp - spinDown) // 2
-    return (f, total_cnt, total_spin)
-end
-
-function SU2singleQNParser(qn::Int)
-    # For SU(2) single quantum number, qn is the total particle count
-    fZ = abs(qn) % 2
-    su2 = fZ // 2
-    return (fZ, qn, su2)
-end
-
-SU2doubleQNParser(qn1::Int, qn2::Int) = (SU2singleQNParser(qn1), SU2singleQNParser(qn2))
-
-macro addSpinIteratorCapability(func)
-    return quote
-        function $(esc(func))(spins::AbstractVector{<:Integer})
-            @assert length(spins) == 2 "Input must contain exactly two integers: [spinUp, spinDown]"
-            return $(esc(func))(spins[1], spins[2])
-        end
-        
-        function $(esc(func))(spins)
-            return $(esc(func))(collect(spins))
-        end
-    end
-end
-
-# Add iterator methods to both functions
-@addSpinIteratorCapability fNumberQNParser
-@addSpinIteratorCapability U1U1QNParser
-@addSpinIteratorCapability SU2doubleQNParser
+using BlockTensorKit: ⊕
 
 function get_qn_type(symm::String)
     """
@@ -221,7 +124,7 @@ end
 
 
 
-function construct_empty_mpo_site(phySpace::GradedSpace, left_qn_mult::Dict{QN, Int64}, right_qn_mult::Dict{QN, Int64}; dataType::DataType=Float64) where QN
+function construct_empty_dense_mpo_site(phySpace::GradedSpace, left_qn_mult::Dict{QN, Int64}, right_qn_mult::Dict{QN, Int64}; dataType::DataType=Float64) where QN
     """
     Construct an empty MPO site with the given quantum number multiplicities.
     
@@ -234,13 +137,106 @@ function construct_empty_mpo_site(phySpace::GradedSpace, left_qn_mult::Dict{QN, 
     Returns:
     - An empty MPO site represented as a TensorMap
     """
-    qn_space = typeof(phySpace)
-    virtSpace_left = reduce(⊕, [qn_space(qn => cnt) for (qn, cnt) in left_qn_mult])
-    virtSpace_right = reduce(⊕, [qn_space(qn => cnt) for (qn, cnt) in right_qn_mult])
 
+    qn_space = typeof(phySpace)
+    virtSpace_left = reduce(TensorKit.oplus, [qn_space(qn => cnt) for (qn, cnt) in left_qn_mult])
+    virtSpace_right = reduce(TensorKit.oplus, [qn_space(qn => cnt) for (qn, cnt) in right_qn_mult])
     
     # Create a TensorMap for this site
     return zeros(dataType, virtSpace_left ⊗ phySpace ← virtSpace_right ⊗ phySpace)
+end
+
+function construct_empty_sparse_block_site(phySumSpace::SumSpace, left_vs::Vector{QN}, right_vs::Vector{QN}) where QN
+    """
+    Construct an empty sparse block MPO site with the given quantum number multiplicities.
+    
+    Parameters:
+    - phySpace: Physical space (GradedSpace) for TensorKit tensors
+    - left_qn_mult: Multiplicity count for each left quantum number
+    - right_qn_mult: Multiplicity count for each right quantum number
+    - dataType: Data type for tensor elements
+    
+    Returns:
+    - empty_block_tensor: An empty sparse block MPO site represented as a SparseBlockTensorMap
+    """
+
+    # TODO: Add condition on symmetry
+    sum_Vspace_left = ⊕([Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])](vs => 1) for vs in first.(left_vs)]...)
+    sum_Vspace_right = ⊕([Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])](vs => 1) for vs in first.(right_vs)]...)
+
+    block_space = sum_Vspace_left ⊗ phySumSpace ← sum_Vspace_right ⊗ phySumSpace
+    empty_block_tensor = BlockTensorKit.spzeros(block_space)
+
+    return empty_block_tensor
+end
+
+function get_offsetDict_and_SumSpaceVS(qn_mult_dict::Dict{QN, Int64}, symm_type::S) where {QN, S <: GradedSpace}
+    # TODO: Remove if not used
+    """
+    Get the offset dictionary and flattened vector space for a given quantum number multiplicity dictionary.
+
+    Parameters:
+    - qn_mult_dict::Dict{QN, Int64}: Dictionary mapping quantum numbers to their multiplicities
+    - symm_type::S: The symmetry type for the vector space
+
+    Returns:
+    - offset_dict::Dict{QN, Int64}: Dictionary mapping quantum numbers to their offsets
+    - sum_space_vs::SumSpace: The flattened vector space representation as a `SumSpace` object
+    """
+    flatten_vs = Vector{S}()
+    offset_dict = Dict{QN, Int64}()
+    offset = 0
+    for (qn, mult) in qn_mult_dict
+        append!(flatten_vs, [symm_type(qn => 1) for _ in 1:mult])
+        offset_dict[qn] = offset
+        offset += mult
+    end
+    sum_space_vs = SumSpace(flatten_vs)
+    return offset_dict, sum_space_vs
+end
+
+function get_full_virt_space(symm::String; as_dict::Bool=false)
+    # TODO: Add to symmetry context
+    if symm == "U1SU2"
+        # Define the virtual spaces with an OrderedDict to assure that the trivial space ((0, 0, 0), 1) is always the first one
+        vs_dict = OrderedDict{Tuple{Bool, Int, Rational{Int}}, Int}(
+                    (0, 0, 0)=>2, 
+                    (0, 0, 1)=>1, 
+                    (1, 1, 1/2)=>2, 
+                    (1, -1, 1/2)=>2, 
+                    (0, 2, 0)=>1, 
+                    (0, -2, 0)=>1, 
+                    (0, 2, 1)=>1, 
+                    (0, -2, 1)=>1
+                )
+    else
+        throw(ArgumentError("Unsupported symmetry type: $symm"))
+    end
+    if as_dict
+        return vs_dict
+    else
+        auxVecSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])](vs_dict...)
+        return auxVecSpace
+    end
+end
+
+function get_vs_idx_map(symm::String)
+    # TODO: Add to symmetry context
+    if symm == "U1SU2"
+        vs_dict = get_full_virt_space(symm, as_dict=true)
+        vs_idx_map = Dict{Tuple{Tuple{Bool, Int, Rational{Int64}}, Int64}, Int64}()
+        idx = 1
+        for (qn, mult) in vs_dict
+            for i in 1:mult
+                vs_idx_map[(qn, i)] = idx
+                idx += 1
+            end
+        end
+
+        return vs_idx_map
+    else
+        throw(ArgumentError("Unsupported symmetry type: $symm"))
+    end
 end
 
 function GetCrAnLocalOpsU1U1(; dataType::DataType=Float64, spin_symm::Bool=false)
@@ -368,16 +364,14 @@ function GetCrAnLocalOpsU1SU2(; dataType::DataType=Float64)
     # 14: (0, -2, 1)    -|↓↓> m=+1
     # 15: (0, -2, 1)    (-|↑↑> + -|↓↓>) / √2 m=0 (spin pointing in the -Y direction in xy-plane?)
     # 16: (0, -2, 1)    -|↑↑> m=-1
-    # auxVecSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0)=>2, (0, 0, 1)=>1, (1, 1, 1/2)=>1, (1, -1, 1/2)=>1, (0, 2, 0)=>1, (0, -2, 0)=>1, (0, 2, 1)=>1, (0, -2, 1)=>1)
     
+    symm = "U1SU2"
     # New Convention + 3rd multiplicity on (0,0,0) to even the probabilities when constracting on the same site
-    auxVecSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0)=>2, (0, 0, 1)=>1, (1, 1, 1/2)=>2, (1, -1, 1/2)=>2, (0, 2, 0)=>1, (0, -2, 0)=>1, (0, 2, 1)=>1, (0, -2, 1)=>1)
+    auxVecSpace = get_full_virt_space(symm)
 
     
     # CREATION OPERATOR
 
-    # New Convention + 2 multiplicities for (1,+-1,1//2)
-    # No additional multiplicities con contraction logics
     crOp_ftree_nzdata = [
         ((((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), (((0, 0, 0.0), (0, 0, 0.0)), (0, 0, 0.0), (false, false), ()), [sqrt(2) 0; 0 1])
         ((((0, -2, 0.0), (0, 2, 0.0)), (0, 0, 0.0), (false, false), ()), (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), [0 -1])
@@ -397,7 +391,7 @@ function GetCrAnLocalOpsU1SU2(; dataType::DataType=Float64)
         ((((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()), (((0, 2, 1.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()), [0; sqrt(3/2)])
         ]
     
-    phySpace = genPhySpace("U1SU2")
+    phySpace = genPhySpace(symm)
     ftree_type = FusionTree{sectortype(typeof(phySpace))}
     crOp = zeros(dataType, auxVecSpace ⊗ phySpace, auxVecSpace ⊗ phySpace)
     # TODO: Check how can this be inherently defined. Maybe this forces the convention to be changed
@@ -420,8 +414,6 @@ function GetCrAnLocalOpsU1SU2(; dataType::DataType=Float64)
 
     # ANNIHILATION OPERATOR
 
-    # New Convention + 2 multiplicities for (1,+-1,1//2)
-    # No additional multiplicities con contraction logics
     anOp_ftree_nzdata=[
         ((((0, 0, 0.0), (0, 0, 0.0)), (0, 0, 0.0), (false, false), ()), (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), [sqrt(2) 0; 0 1])
         ((((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), (((0, -2, 0.0), (0, 2, 0.0)), (0, 0, 0.0), (false, false), ()), [0; -1])
@@ -541,7 +533,7 @@ function FusionTreeDataType(QNType)
               QNType, 
               Tuple{Bool, Bool}, 
               Tuple{}},
-        Matrix{Float64}
+        Float64
     }
 end
 
@@ -679,13 +671,40 @@ end
 
 Base.keys(lo2V::LocalOps_DoubleV) = ["I", "c1", "c2", "a1", "a2"]
 
+function get_all_local_ops_str(symm::String)
+    """
+    Returns a Vector of all local operator strings for the given symmetry.
+
+    Parameters:
+    - `symm`: A String representing the symmetry.
+    Returns:
+    - `all_local_ops_str`: A Vector of Strings representing all local operator strings.
+    """
+    all_local_ops_str = ["I"]
+    if symm == "U1SU2"
+        max_op_str_vector = ["a1", "a2", "c2", "c1"]
+        n = length(max_op_str_vector)
+        for i in 1:n
+            for c in combinations(max_op_str_vector, i)
+                op_str = join(c)
+                push!(all_local_ops_str, op_str)
+            end
+        end
+    else
+        throw(ArgumentError("Unsupported symmetry: $symm. Supported symmetries are: 'U1SU2'."))
+    end
+    return all_local_ops_str
+end
+
 
 struct Op2Data{T}
-    all_ops_to_data_dict::T
+    data::T
     ops::AbstractLocalOps{Float64}
     symm::String
+    is_filled::Dict{String, Bool}
     
-    function Op2Data(symm::String)
+    function Op2Data(symm::String; fill_data::Bool=true)
+        symm = validate_symmetry(symm)
         
         if symm == "U1U1"
             ops = GetCrAnLocalOpsU1U1(spin_symm=false)
@@ -697,59 +716,94 @@ struct Op2Data{T}
             throw(ArgumentError("Unsupported symmetry: $symm. Supported symmetries are: 'U1U1', 'U1SU2'."))
         end
 
-        # Define the OpDataDict type
-        QNType = get_qn_type(symm)
-        OpDataDict = Dict{String, Dict{Tuple{QNType, QNType}, Vector{FusionTreeDataType(QNType)}}}
+        all_local_ops = get_all_local_ops_str(symm)
 
-        return new{OpDataDict}(OpDataDict(), ops, symm)
+        QNType = get_qn_type(symm)
+
+        # Dictionary to store the sparse operator data
+        OpDataDict = Dict{String, Dict{Tuple{QNType, Int}, Dict{Tuple{QNType, Int}, Vector{FusionTreeDataType(QNType)}}}}
+
+        # Fill the operator data dictionary if requested
+        if fill_data
+            data = OpDataDict()
+            for op_str in all_local_ops
+                op_data = get_op_data(ops, op_str, QNType)
+                data[op_str] = op_data
+            end
+            is_filled = Dict(op => true for op in all_local_ops)
+
+        else
+            data = OpDataDict()
+            is_filled = Dict(op => false for op in all_local_ops)
+        end
+
+        return new{typeof(data)}(data, ops, symm, is_filled)
     end
 end
 
-function Base.getindex(op2data::Op2Data, input::Tuple{String, QN, QN}) where QN
-    op_str, left_qn_in, right_qn_in = input
+function Base.getindex(op2data::Op2Data, input::Tuple{String, QN, Int, QN, Int}) where QN
+    op_str, vs_out, vs_out_mult, vs_in, vs_in_mult = input
 
-    if haskey(op2data.all_ops_to_data_dict, op_str)
-        if haskey(op2data.all_ops_to_data_dict[op_str], (left_qn_in, right_qn_in))
-            return op2data.all_ops_to_data_dict[op_str][(left_qn_in, right_qn_in)]
+    if haskey(op2data.data, op_str)
+        if haskey(op2data.data[op_str], (vs_out, vs_out_mult))
+            if haskey(op2data.data[op_str][(vs_out, vs_out_mult)], (vs_in, vs_in_mult))
+                
+                return op2data.data[op_str][(vs_out, vs_out_mult)][(vs_in, vs_in_mult)]
+                
+            else
+                @warn "No data found for operator $op_str with left virtual space $vs_out and multiplicity $vs_out_mult in the dictionary for right virtual space $vs_in and multiplicity $vs_in_mult."
+                return [] # Return an empty vector if the data not found
+            end
         else
-            @warn "Operator $op_str with left QN $left_qn_in and right QN $right_qn_in not found in the dictionary."
-            return FusionTreeDataType(QN)[]
+            @warn "Operator $op_str with left virtual space $vs_out and multiplicity $vs_out_mult not found in the dictionary."
+            return [] # Return an empty vector if the data not found
         end
     else
-        op2data.all_ops_to_data_dict[op_str] = Dict{Tuple{QN, QN}, Vector{FusionTreeDataType(QN)}}()
+        
+        op_data = get_op_data(op2data.ops, op_str, QN)
 
-        # Construct the operator's TensorMap
-        # Note that the order of the operations is flipped when constructing the composite operator
-        # For example, if the operator is "ac", first the annihilation is applied and then the creation
-        # So that the composite operator will have the creation operator's domain and the annihilation operator's codomain
-        op_TM = construct_op_TensorMap(op2data, op_str)
-
-        # Construct the list of the operator's non-zero fusion trees
-        for (f1, f2) in fusiontrees(op_TM)
-            val = Matrix(op_TM[f1,f2][:,1,:,1]) # Since there are no multiplicities in the virtual space, we get the fusion tree values as a matrix with dimension (#left virtual multiplicities, #right virtual multiplicities)
-            if !all(val .== 0)
-                left_qn_, ftree_left  = ftree_data(f1)
-                right_qn_, ftree_right = ftree_data(f2)
-
-                if !haskey(op2data.all_ops_to_data_dict[op_str], (left_qn_, right_qn_))
-                    op2data.all_ops_to_data_dict[op_str][(left_qn_, right_qn_)] = FusionTreeDataType(QN)[]
-                end
-                # println("Adding operator $op_str with left QN $left_qn_ and right QN $right_qn_ to the dictionary.")
-
-                push!(op2data.all_ops_to_data_dict[op_str][(left_qn_, right_qn_)], (ftree_left, ftree_right, val))
-            end
+        if !haskey(op_data[op_str], (vs_out, vs_out_mult)) || !haskey(op_data[op_str][(vs_out, vs_out_mult)], (vs_in, vs_in_mult))
+            @warn "No data found for operator $op_str with left virtual space $vs_out and multiplicity $vs_out_mult in the dictionary for right virtual space $vs_in and multiplicity $vs_in_mult."
         end
+        op2data.data[op_str] = op_data
+        op2data.is_filled[op_str] = true
 
-        return op2data.all_ops_to_data_dict[op_str][(left_qn_in, right_qn_in)]
+        return op2data.data[op_str][(vs_out, vs_out_mult)][(vs_in, vs_in_mult)]
     end
 end
 
-function construct_op_TensorMap(op2data::Op2Data, op_str::String)
+function get_op_data(ops::AbstractLocalOps, op_str::String, ::Type{QN}) where QN
+    op_TM = construct_op_TensorMap(ops, op_str) # note QN is not inferred as `sectortype(op_TM)` because we don't want any dependency on TensorKit and define the virtual spaces types ourselves
+    
+    # Use DefaultDict to eliminate haskey checks
+    op_data = DefaultDict{Tuple{QN, Int}, DefaultDict{Tuple{QN, Int}, Vector{FusionTreeDataType(QN)}}}(
+        () -> DefaultDict{Tuple{QN, Int}, Vector{FusionTreeDataType(QN)}}(
+            () -> Vector{FusionTreeDataType(QN)}()
+        )
+    )
+    
+    for (f1, f2) in fusiontrees(op_TM)
+        val = Matrix(op_TM[f1,f2][:,1,:,1])
+        if !iszero(val) # !all(val .== 0)
+            vs_out, ftree_left = ftree_data(f1)
+            vs_in, ftree_right = ftree_data(f2)
+
+
+            for (vs_out_mult, vs_in_mult, nzval) in zip(findnz(SparseArrays.sparse(val))...)
+                push!(op_data[(vs_out, vs_out_mult)][(vs_in, vs_in_mult)], (ftree_left, ftree_right, nzval))
+            end
+        end
+    end
+    
+    return op_data
+end
+
+function construct_op_TensorMap(ops::AbstractLocalOps, op_str::String)
     """
     Construct a TensorMap for a given operator string using the Op2Data structure.
     
     Parameters:
-    - op2data: Op2Data instance containing operator data
+    - ops: AbstractLocalOps containing the operator definitions
     - op_str: String representing the operator
     
     Returns:
@@ -757,15 +811,9 @@ function construct_op_TensorMap(op2data::Op2Data, op_str::String)
     """
     if op_str == "I"
         # Identity operator
-        return op2data.ops["I"]
-    end
-    if op2data.symm == "U1SU2"
-        op_TM = reduce(*, [op2data.ops[join(collect(op_str)[i:i+1])] for i in reverse(1:2:length(op_str))])
-    elseif op2data.symm == "U1U1"
-        # This assumes GetCrAnLocalOpsU1U1(spin_symm=false), as the operators are defined with a spin character as "c↑", "c↓", "a↑", "a↓"
-        op_TM = reduce(*, [op2data.ops[join(collect(op_str)[i:i+1])] for i in reverse(1:2:length(op_str))])
+        op_TM = ops["I"]
     else
-        throw(ArgumentError("Unsupported symmetry: $(op2data.symm)"))
+        op_TM = reduce(*, [ops[join(collect(op_str)[i:i+1])] for i in reverse(1:2:length(op_str))])
     end
     
     return op_TM
@@ -773,29 +821,36 @@ end
 
 
 
-function fill_mpo_site_SU2!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=false)
+function fill_mpo_site_SU2!(sblock_site, symb_mpo_site, vs_left, vs_right, op2data, ftree_type, physical_abs_offsets; verbose=false)
 
     for (row, col, ops) in zip(findnz(symb_mpo_site)...)
 
-        for (left_qn, left_op_mult, left_MPOsite_mult) in vs_map_left[row]
-            for (right_qn, right_op_mult, right_MPOsite_mult) in vs_map_right[col]
-        
-                for op in ops
+        left_vsQN, left_vsMult = vs_left[row]
+        right_qnQN, right_vsMult = vs_right[col]
 
-                    op_str = op.operator
+        for (op_str, op_coef) in ops
 
-                    op_data = op2data[(op_str, left_qn, right_qn)]
+            op_data = op2data[(op_str, left_vsQN, left_vsMult, right_qnQN, right_vsMult)]
 
-                    for (ftree_left, ftree_right, val) in op_data
-                        f1 = ftree_type(ftree_left...)
-                        f2 = ftree_type(ftree_right...)
+            for (ftree_left, ftree_right, val) in op_data
 
-                        verbose && println("Filling MPO site for operator: $op, op_str $op_str, left QN: $left_qn, left_op_mult: $left_op_mult, right QN: $right_qn, right_op_mult: $right_op_mult left_mult: $left_MPOsite_mult, right_mult: $right_MPOsite_mult, ftree_left: $ftree_left, ftree_right: $ftree_right, val: $val, val[left_op_mult, right_op_mult]: $(val[left_op_mult, right_op_mult]),  coef: $(op.coefficient)")
-                        mpo_site[f1,f2][left_MPOsite_mult, 1, right_MPOsite_mult, 1] += val[left_op_mult, right_op_mult] * op.coefficient
-                    end
-                end
+                ps_out = ftree_left[1][2] # physical sector out
+                ps_in = ftree_right[1][2] # physical sector in
+
+                phy_l = physical_abs_offsets[ps_out]
+                phy_r = physical_abs_offsets[ps_in]
+
+                sp_coordinates = (row, phy_l, col, phy_r)
+
+                ftree_tm = copy(sblock_site[sp_coordinates...])
+                old_val = only(ftree_tm[ftree_type(ftree_left...), ftree_type(ftree_right...)])
+                new_val = old_val + val * op_coef
+                ftree_tm[ftree_type(ftree_left...), ftree_type(ftree_right...)] .= new_val
+
+                verbose && println("Filling MPO site for op_str: $op_str, left QN: $left_vsQN, left_op_mult: $left_vsMult, right QN: $right_qnQN, right_op_mult: $right_vsMult")
+                verbose && println("sp_coordinates: $sp_coordinates, old_val: $old_val, new_val: $new_val, CG coef val: $val, operator's coef: $op_coef")
+                push!(sblock_site.data, CartesianIndex(sp_coordinates...) => ftree_tm)
             end
-
         end
     end
 
@@ -846,37 +901,35 @@ function validate_symmetry(symm)
     end
 end
 
-symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm::String; kwargs...) = _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, validate_symmetry(symm); kwargs...)
+symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm::String, vsQN_idx_map, op2data; kwargs...) = _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, validate_symmetry(symm), vsQN_idx_map, op2data; kwargs...)
 
-function _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm::String; dataType::DataType=Float64, verbose=false)
+function _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm::String, vsQN_idx_map, op2data; dataType::DataType=Float64, verbose=false)
+
     # TODO: Remove spin_symm parameter when the MPO construction is stable. It should always be false for U1U1 and true for U1SU2.
     
-    mpo_sites = Vector{TensorMap}(undef, length(symbolic_mpo)) # Allocate TensorMap with the already known properties (type, shape, etc.)
-    qn_parser = QNParser(symm)
+    mpo_sites = Vector{SparseBlockTensorMap}(undef, length(symbolic_mpo)) # Allocate TensorMap with the already known properties (type, shape, etc.)
 
-    qn_vs_maps, qn_mult_counts = get_QN_mapping_and_vs_multiplicity(virt_spaces, qn_parser; symm=symm)
+    phySumSpace = genFlattenedPhySpace(symm)
+    physical_abs_offsets = get_physical_abs_offsets(symm)
 
-    op2data = Op2Data(symm)
-    phySpace = genPhySpace(symm)
-    ftree_type = FusionTree{sectortype(phySpace)}
+    ftree_type = FusionTree{sectortype(phySumSpace)}
 
     for (isite, symb_mpo_site) in enumerate(symbolic_mpo)
-        qn_mult_counts_left = qn_mult_counts[isite]
-        qn_mult_counts_right = qn_mult_counts[isite+1]
-        mpo_site = construct_empty_mpo_site(phySpace, qn_mult_counts_left, qn_mult_counts_right; dataType=dataType)
+        verbose && println("Processing MPO site $isite with symbolic data: $symb_mpo_site")
+        vs_left = virt_spaces[isite]
+        vs_right = virt_spaces[isite+1]
         
-        vs_map_left = qn_vs_maps[isite]
-        vs_map_right = qn_vs_maps[isite+1]
+        sblock_site = construct_empty_sparse_block_site(phySumSpace, vs_left, vs_right)
         
         if symm == "U1SU2"
-            fill_mpo_site_SU2!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=verbose)
+            fill_mpo_site_SU2!(sblock_site, symb_mpo_site, vs_left, vs_right, op2data, ftree_type, physical_abs_offsets; verbose=verbose)
         elseif symm == "U1U1"
-            fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=verbose)
+            fill_mpo_site_U1U1!(sblock_site, symb_mpo_site, vs_map_left, vs_map_right, op2data, ftree_type; verbose=verbose)
         else
             throw(ArgumentError("Unsupported symmetry type: $symm"))
         end
         
-        mpo_sites[isite] = mpo_site
+        mpo_sites[isite] = sblock_site
     end
 
     return mpo_sites
@@ -902,15 +955,18 @@ function mpo_to_mat(H_mpo)
                              domain_legs, codomain_leg)
     end
     
-    # Output physical legs: N_spt+1:2*N_spt
-    # Input physical legs in reverse order: N_spt:-1:1
     right_legs = collect(N_spt+1:2*N_spt)
     left_legs = collect(N_spt:-1:1)
     
     H_contraction = TensorKit.permute(H_contraction * boundaryMPO_R, tuple(right_legs...), tuple(left_legs...))
     
+    # Convert to TensorMap when working with `SparseBlockTensorMap`s
+    if !isa(H_contraction, TensorMap)
+        H_contraction = TensorMap(H_contraction)
+    end
+
     # Reshape to matrix form
-    mpo_mat = sparse(reshape(convert(Array, H_contraction), (4^N_spt, 4^N_spt)))
+    mpo_mat = SparseArrays.sparse(reshape(convert(Array, H_contraction), (4^N_spt, 4^N_spt)))
     return mpo_mat
 end
 
@@ -929,16 +985,58 @@ function genPhySpace(symm)
     # FermionParity must always be imposed
     
     if uppercase(symm) == "U1"
-        orbPhysSpace = Vect[(FermionParity ⊠ Irrep[U₁])]((0, 0) => 1, (1, 1) => 2, (0, 2) => 1)
+        phySpace = Vect[(FermionParity ⊠ Irrep[U₁])]((0, 0) => 1, (1, 1) => 2, (0, 2) => 1)
     elseif uppercase(symm) == "U1U1"
         # (fParity, total count, spin count)
-        orbPhysSpace = Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (1, 1, -1 // 2) => 1, (0, 2, 0) => 1)
+        phySpace = Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (1, 1, -1 // 2) => 1, (0, 2, 0) => 1)
     elseif uppercase(symm) == "U1SU2"
-        orbPhysSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (0, 2, 0) => 1)
+        phySpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (0, 2, 0) => 1)
     else
         throw(ArgumentError("The specified symmetry type '$symm' is not implemented. The current options are: 'U1', 'U1U1', and 'U1SU2'"))
     end
 
-    return orbPhysSpace
+    return phySpace
 
+end
+
+function genFlattenedPhySpace(symm)
+    # This sets the convention for the order of each physical space sector.
+    
+    if uppercase(symm) == "U1"
+        phySumSpace = Vect[(FermionParity ⊠ Irrep[U₁])]((0, 0) => 1) ⊕ Vect[(FermionParity ⊠ Irrep[U₁])]((1, 1) => 1) ⊕ Vect[(FermionParity ⊠ Irrep[U₁])]((1, 1) => 1) ⊕ Vect[(FermionParity ⊠ Irrep[U₁])]((0, 2) => 1)
+    elseif uppercase(symm) == "U1U1"
+        # (fParity, total count, spin count)
+        phySumSpace = Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((0, 0, 0) => 1) ⊕ Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((1, 1, 1 // 2) => 1) ⊕ Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((1, 1, -1 // 2) => 1) ⊕ Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((0, 2, 0) => 1)
+    elseif uppercase(symm) == "U1SU2"
+        phySumSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0) => 1) ⊕ Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((1, 1, 1 // 2) => 1) ⊕ Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 2, 0) => 1)
+    else
+        throw(ArgumentError("The specified symmetry type '$symm' is not implemented. The current options are: 'U1', 'U1U1', and 'U1SU2'"))
+    end
+
+    return phySumSpace
+
+end
+
+function get_physical_abs_offsets(symm::String)
+    """
+    Returns a function that maps the physical quantum numbers to their absolute offsets in the flattened physical space.
+    """
+    phySumSpace = genFlattenedPhySpace(symm)
+    physical_offsets = Dict(ftree_inner_data(phySumSpace[i].dims.keys[1])  => i for i in 1:length(phySumSpace))
+    
+    return physical_offsets
+end
+
+
+chemical_mpo(molecule::Molecule; kwargs...) = chemical_mpo(xyz_string(Molecule(molecule)); kwargs...)
+chemical_mpo(mol_str::String; kwargs...) = chemical_mpo(molecular_interaction_coefficients(molecule)...; kwargs...)
+chemical_mpo(h1e, h2e, nuc_e; kwargs...) = chemical_mpo(h1e, h2e; nuc_e=nuc_e, kwargs...)
+
+function chemical_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; nuc_e::Float64=0.0, symm::String="U1SU2", algo::String="Hungarian", dataType::DataType=Float64, verbose::Bool=false)
+    op_terms = gen_ChemOpSum(h1e, h2e, nuc_e)
+    op2data = Op2Data(symm)
+    table, factors, localOps_idx_map, vsQN_idx_map = terms_to_table(op_terms, op2data)
+    symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; algo=algo, verbose=verbose)
+    mpo = symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm, vsQN_idx_map, op2data; verbose=verbose)
+    return mpo
 end

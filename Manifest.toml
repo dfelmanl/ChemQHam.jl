@@ -2,7 +2,7 @@
 
 julia_version = "1.11.5"
 manifest_format = "2.0"
-project_hash = "744fbc432cecf69da2a394eed6de95f900ef920d"
+project_hash = "38de1336d79f7aba1665d193238b089285eb536b"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -161,6 +161,12 @@ version = "1.6.3"
     [deps.BlockArrays.weakdeps]
     Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
     BandedMatrices = "aae01518-5342-5314-be14-df237901396f"
+
+[[deps.BlockTensorKit]]
+deps = ["BlockArrays", "Compat", "LinearAlgebra", "Random", "Strided", "TensorKit", "TensorOperations", "TupleTools", "VectorInterface"]
+git-tree-sha1 = "68bf5856eac5d94ef48024005dc666e64eb8ec3f"
+uuid = "5f87ffc2-9cf1-4a46-8172-465d160bd8cd"
+version = "0.1.9"
 
 [[deps.ChainRules]]
 deps = ["Adapt", "ChainRulesCore", "Compat", "Distributed", "GPUArraysCore", "IrrationalConstants", "LinearAlgebra", "Random", "RealDot", "SparseArrays", "SparseInverseSubset", "Statistics", "StructArrays", "SuiteSparse"]

@@ -1,21 +1,6 @@
 
 """
-    construct_symbolic_mpo(n_sites::Int, table, primary_ops, factor; algo="Hungarian")
-
-Construct a symbolic MPO representation optimized for bond dimension.
-This follows the approach from Renormalizer.
-
-Parameters:
-- n_sites: Number of sites
-- table: Table of operator indices for each term
-- primary_ops: List of primary operators (SiteOp objects)
-- factor: Coefficients for each term in the table
-- algo: Algorithm to use for optimization ("Hungarian" is implemented, "Hopcroft-Karp" will be implemented in the future)
-
-Returns:
-- symbolic_mpo: A representation of the MPO with optimized structure
-
-
+    construct_symbolic_mpo
 The idea:
 
 the index of the primary ops {0:"I", 1:"a", 2:r"a^†"}
@@ -79,20 +64,22 @@ The local mpo is the transformation matrix between 0',1',2' to 0'',1''
 The local mpo is the transformation matrix between 0'',1'' to 0'''
 
 """
-function construct_symbolic_mpo(table, primary_ops, factor; algo="Hungarian", verbose=false)
+function construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; algo="Hungarian", verbose=false)
 
     n_sites = size(table, 2)
+
+    idx_vsQN_map = Dict(v => k for (k, v) in vsQN_idx_map)
+    idx_localOps_map = Dict(v => k for (k, v) in localOps_idx_map)
     
     # Add ones at the beginning and end of each row. They will be the index of the trivial auxiliary virtual bonds at the start and end of the MPO
     ones_col = ones(Int, size(table, 1))
     table = hcat(ones_col, table, ones_col)
     
-    # Start with the trivial virtual space.
-    # In Renormalizer is it just a list with length 1 and the list is actually in the first index
-    virtSpace_in = [[VirtSpace()]]
-    
+    virtSpace_left = [vsQN_idx_map[((false, 0, 0), 1)]] # Start with the trivial virtual space. Later on, we can impose that the symmetry related idx_vsQN_map with have <trivial_space> as the first element; and just write virtSpace_in = [1]
+    site_entries_list = Vector{Vector{Tuple{Int, Int, Int, Float64}}}(undef, n_sites)
+
     # Store the list of virtual spaces at each site
-    virtSpace_out_list = [virtSpace_in]
+    virtSpaces_list = [virtSpace_left]
 
     verbose && println("Using $(algo) algorithm for bipartite matching optimization")
     
@@ -105,80 +92,68 @@ function construct_symbolic_mpo(table, primary_ops, factor; algo="Hungarian", ve
         table_col = table[:, 3:end]
         
         # Call the one_site function to process this site
-        virtSpace_out, table, factor = _construct_symbolic_mpo_one_site(
-            table_row, table_col, virtSpace_in, factor, primary_ops; algo=algo
+        site_entries, virtSpace_right, table, factors = _construct_symbolic_mpo_one_site(
+            table_row, table_col, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, op2data; algo=algo
         )
         
         # Update for next iteration
-        virtSpace_in = virtSpace_out
+        virtSpace_left = virtSpace_right
         
         # Store the virtual spaces for this site
-        push!(virtSpace_out_list, virtSpace_out)
+        push!(virtSpaces_list, virtSpace_right)
+
+        site_entries_list[isite] = site_entries
     end
     
     # At the end, we should have a single term with factor 1 (or close to it due to floating point)
     # Comment out assert for now during development
-    @assert size(table, 1) == length(factor) == 1 && isapprox(factor[1], 1.0, atol=1e-10)
-    @assert length(virtSpace_out_list) == n_sites + 1
+    @assert size(table, 1) == length(factors) == 1 && isapprox(factors[1], 1.0, atol=1e-10)
+    @assert length(virtSpaces_list) == n_sites + 1
 
     # Construct symbolic MPO
     symbolic_mpo = [] # Preallocate if possible
     for isite in 1:n_sites
-        symbolic_site = compose_symbolic_site_sparse(virtSpace_out_list[isite], virtSpace_out_list[isite+1], primary_ops)
+        symbolic_site = compose_symbolic_site_sparse(site_entries_list[isite], virtSpaces_list[isite], virtSpaces_list[isite+1], idx_localOps_map)
         push!(symbolic_mpo, symbolic_site)
     end
 
-    # Calculate the virtual spaces' quantum numbers
 
-    mpoVs = Vector{Vector{Vector{Tuple{Int, Int}}}}(undef, length(virtSpace_out_list))
-    for (i, virtSpace_out) in enumerate(virtSpace_out_list)
-        mpoVs[i] = [[(vs.qn1, vs.qn2) for vs in vs_grp] for vs_grp in virtSpace_out]
+    # Calculate the virtual spaces' quantum numbers
+    QNType = Tuple{Bool, Int, Rational{Int}} # Fix later to be defined by the symm obj
+
+    mpoVs = Vector{Vector{Tuple{QNType, Int}}}(undef, length(virtSpaces_list))
+    for (i, virtSpace_out) in enumerate(virtSpaces_list)
+        mpoVs[i] = [idx_vsQN_map[vs_grp] for vs_grp in virtSpace_out]
     end
 
-    @assert all(length(unique(vs))==1 for vs_grp in mpoVs for vs in vs_grp)
+    # @assert all(length(unique(vs))==1 for vs_grp in mpoVs for vs in vs_grp)
     verbose && println("symbolic MPO's bond dimensions: $([length(vs) for vs in mpoVs])")
     
-    return symbolic_mpo, mpoVs
+    return symbolic_mpo, mpoVs, virtSpaces_list
 end
 
-function construct_symbolic_mpo(op_terms::ChemOpSum; kwargs...)
-    table, primary_ops, factors = terms_to_table(op_terms)
-    return construct_symbolic_mpo(table, primary_ops, factors; kwargs...)
+function construct_symbolic_mpo(op_terms::ChemOpSum, op2data::Op2Data; kwargs...)
+    table, factors, localOps_idx_map, vsQN_idx_map = terms_to_table(op_terms, op2data)
+    return construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; kwargs...)
 end
 
-function construct_symbolic_mpo(chem_data, ord; ops_tol=1e-14, maxdim=2^30, algo="Hungarian", spin_symm::Bool=false, verbose=false)
-    # Generate the ChemOpSum object from the Hamiltonian coefficients:
-    terms = gen_ChemOpSum(chem_data, ord; tol=ops_tol, spin_symm=spin_symm)
+construct_symbolic_mpo(molecule::Molecule; kwargs...) = construct_symbolic_mpo(xyz_string(Molecule(molecule)); kwargs...)
+construct_symbolic_mpo(mol_str::String; kwargs...) = construct_symbolic_mpo(molecular_interaction_coefficients(molecule)...; kwargs...)
+construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}, nuc_e::Float64; kwargs...) = construct_symbolic_mpo(h1e, h2e; nuc_e=nuc_e, kwargs...)
 
-    # Convert to operator table
-    table, primary_ops, factors = _terms_to_table(chem_data.N_spt, terms)
+function construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; nuc_e::Float64=0.0, symm::String="U1SU2", ord=nothing, ops_tol=1e-14, maxdim=2^30, algo="Hungarian", spin_symm::Bool=true, verbose=false)
     
-    # Build symbolic MPO with graph-based optimization
-    symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, primary_ops, factors; algo=algo, verbose=verbose)
+    terms = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, n_sites=0, ord=ord, tol=ops_tol, spin_symm=spin_symm)
+    op2data = Op2Data(symm)
+
+    table, factors, localOps_idx_map, vsQN_idx_map = terms_to_table(terms, op2data)
+    symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; algo=algo, verbose=verbose)
     
     return symbolic_mpo, virt_spaces
 end
 
-"""
-    _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_in_list, factor, primary_ops; algo="Hungarian")
 
-Process one site in the MPO construction, following Renormalizer's approach.
-
-Parameters:
-- table_row: Left part of the table
-- table_col: Right part of the table
-- virtSpace_in_list: Input virtual spaces from previous site
-- factor: Coefficients for each term
-- primary_ops: List of primary operators
-- algo: Algorithm to use ("Hungarian" is implemented, "Hopcroft-Karp" will be implemented in the future)
-- k: Extra parameter (usually 0)
-
-Returns:
-- virtSpaces_out: Output virtual spaces for this site
-- new_table: Updated table for next site
-- new_factor: Updated factors
-"""
-function _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_in, factor, primary_ops; algo="Hungarian")
+function _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, op2data; algo="Hungarian")
     # Find unique rows and their inverse mapping
     term_row, row_unique_inverseMap = find_unique_with_inverseMap(table_row)
     
@@ -189,11 +164,11 @@ function _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_in, fa
     term_col, col_unique_inverseMap = find_unique_with_inverseMap(table_col)
     
     # Create a sparse matrix directly where non-zero values are indices into the factor array
-    non_red = sparse(row_unique_inverseMap, col_unique_inverseMap, 1:length(factor))
+    non_red = SparseArrays.sparse(row_unique_inverseMap, col_unique_inverseMap, 1:length(factors))
     
-    virtSpaces_out, table, new_factor = _decompose_graph(term_row, term_col, non_red, virtSpace_in, factor, primary_ops, algo)
+    site_entries, virtSpaces_out, table, new_factor = _decompose_graph(term_row, term_col, non_red, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, op2data, algo)
     
-    return virtSpaces_out, table, new_factor
+    return site_entries, virtSpaces_out, table, new_factor
 end
 
 """
@@ -221,14 +196,15 @@ Returns:
 Note: The Hungarian algorithm tends to produce more optimal MPO bond dimensions
       for quantum chemistry Hamiltonians, while "Hopcroft-Karp" is more time efficient.
 """
-function _decompose_graph(term_row, term_col, non_red, virtSpace_in, factor, primary_ops, algo)
+function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, factors, idx_localOps_map, idx_vsQN_map, op2data, algo)
     
     # Get dimensions directly from the sparse matrix
     n_rows, n_cols = size(non_red)
+
+    vsQN_idx_map = get_vs_idx_map(op2data.symm)
     
     # Use transpose to convert to CSC format and exploit efficient row access
-    # Previously, `if !isempty(row_select)` was used to check if non_red_T was needed. it might overallocate memory.
-    non_red_T = sparse(transpose(non_red))  # Transpose converts CSC to CSR (effectively). TODO: Define it directly in CSR format (:rows as last argument) here by merging the two functions and having access to the inverseMaps. This allocates new data, so it might be better to calculate this in the caller function.
+    non_red_T = SparseArrays.sparse(transpose(non_red))  # Transpose converts CSC to CSR (effectively). TODO: Define it directly in CSR format (:rows as last argument) here by merging the two functions and having access to the inverseMaps. This allocates new data, so it might be better to calculate this in the caller function.
     sparse_rows_T = rowvals(non_red_T)
     sparse_vals_T = nonzeros(non_red_T)
 
@@ -245,7 +221,6 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_in, factor, pri
         sparse_rows = rowvals(non_red)
         bigraph = [sparse_rows[nzrange(non_red, row)] for row in 1:n_cols]
         
-        # When rows >= cols, swap the results to match Renormalizer
         colbool, rowbool = compute_bipartite_vertex_cover(bigraph, algo)
     end
 
@@ -259,72 +234,113 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_in, factor, pri
     
 
     # Initialize output virtual spaces, tables, and factors
-    virtSpaces_out = [] # Vector{Vector{VirtSpace}}(undef, length(virtSpace_in_list)) ?
+    virtSpaces_right_arr = []
     new_table = []
     new_factor = []
+    site_entries = Vector{Tuple{Int, Int, Int, Float64}}() # Store site entries as (vs_left_idx, vs_right_idx, site_op_str_idx, factor)
 
-    # Process selected rows first (following Renormalizer's approach)
+    # Process selected rows first for better performance
     for row_idx in row_select
         # Create an output virtual space for this row
-        symbol = term_row[row_idx]
-        
-        # Calculate quantum numbers using input virtual spaces and primary operators
-        # If symbol has quantum number information, we would use it here
-        # In Renormalizer's version, this would compute quantum numbers based on the row symbol
-        # For now, we use (0,0) as default quantum numbers
-        # virtSpace_out = _compute_virtSpace(virtSpace_in_list, symbol, primary_ops)
-        @assert length(unique((v.qn1, v.qn2) for v in virtSpace_in[symbol[1]])) == 1 # Remove when the code is stable
-        
-        virtSpace_out = apply_op(virtSpace_in[symbol[1]][1], primary_ops[symbol[2]].operator, 1.0, symbol[1], symbol[2])
-        
-        # Add the new virtual space to our list
-        push!(virtSpaces_out, [virtSpace_out])
+        vs_left_idx, site_op_idx = term_row[row_idx]
 
-        rows_range = nzrange(non_red_T, row_idx)
-
-        table_entry_n_rows = length(rows_range)
+        # Get the list of possible right virtual spaces for this left index and site operator
+        vs_left_tup = idx_vsQN_map[virtSpace_left_arr[vs_left_idx]]
+        op_str = idx_localOps_map[site_op_idx]
+        vs_right_list = [vsQN_idx_map[vs] for vs in keys(op2data.data[op_str][vs_left_tup])]
+        
+        # Since we transposed the sparse matrix, we get the columns as rows.
+        matched_cols_range = nzrange(non_red_T, row_idx)
+        
+        # table_entry_n_matched_cols = length(matched_cols_range)
         table_entry_n_cols = length(term_col[1]) + 1
 
-        virtSpace_next_idx = length(virtSpaces_out)
+        for virtSpace_right in vs_right_list
 
-        table_entry = Matrix{Int}(undef, table_entry_n_rows, table_entry_n_cols)
-        for (i, sparse_row_idx) in enumerate(sparse_rows_T[rows_range])
-            table_entry[i, 1] = virtSpace_next_idx
-            table_entry[i, 2:table_entry_n_cols] = term_col[sparse_row_idx]
+            allowed_vs_right_list = [[vsQN_idx_map[vs] for vs in keys(op2data.data[idx_localOps_map[term_col[sparse_rows_T[matched_col_idx]][1]]])] for matched_col_idx in matched_cols_range]
+            
+            allowed_matched_idxs = findall(vs_allowed_by_col -> virtSpace_right in vs_allowed_by_col, allowed_vs_right_list)
+            if isempty(allowed_matched_idxs)
+                continue # Skip this right virtual space if it is not allowed by any column
+            end
+            
+            allowed_matched_col_idxs = sparse_rows_T[matched_cols_range[allowed_matched_idxs]]
+            table_entry_n_matched_cols = length(allowed_matched_col_idxs)
+            
+            push!(virtSpaces_right_arr, virtSpace_right)
+            vs_right_idx = length(virtSpaces_right_arr)
+            
+            entry = (vs_left_idx, vs_right_idx, site_op_idx, 1.0)
+            push!(site_entries, entry)
+    
+            table_entry = Matrix{Int}(undef, table_entry_n_matched_cols, table_entry_n_cols)
+            for (i, col_idx) in enumerate(allowed_matched_col_idxs)
+                table_entry[i, 1] = vs_right_idx
+                table_entry[i, 2:table_entry_n_cols] = term_col[col_idx]
+            end
+
+            push!(new_table, table_entry)
+            append!(new_factor, factors[sparse_vals_T[matched_cols_range[allowed_matched_idxs]]])
+
         end
-        push!(new_table, table_entry)
 
-        append!(new_factor, factor[sparse_vals_T[rows_range]])
-        
-
-        sparse_vals_T[rows_range] .= 0
+        sparse_vals_T[matched_cols_range] .= 0
                 
     end
 
     
-    dropzeros!(non_red_T)
-    non_red = sparse(non_red_T')
+    SparseArrays.dropzeros!(non_red_T)
+    non_red = SparseArrays.sparse(non_red_T')
     
     # Process selected columns
     for col_idx in col_select
         # Create a multi-operator entry for this column
-        push!(virtSpaces_out, [])
+        
+        next_op_str = idx_localOps_map[term_col[col_idx][1]]
+        allowed_vs_right = keys(op2data.data[next_op_str])
 
+        vs_right_idx_dict = Dict{Int, Int}()
+        
         for (row_idx, val) in zip(findnz(non_red[:, col_idx])...)
-            symbol = term_row[row_idx]
-            @assert length(unique((v.qn1, v.qn2) for v in virtSpace_in[symbol[1]])) == 1 # Remove when the code is stable
-            virtSpace_out = apply_op(virtSpace_in[symbol[1]][1], primary_ops[symbol[2]].operator, factor[val], symbol[1], symbol[2]) # In Renormalizer: factor=factor[non_red_one_col[i] - 1]. Why the -1? Indexing should match the original table. TODO: Also, make sure the factor is correct.
-            push!(virtSpaces_out[end], virtSpace_out)
+            vs_left_idx, site_op_idx = term_row[row_idx]
+
+            vs_left_tup = idx_vsQN_map[virtSpace_left_arr[vs_left_idx]]
+            op_str = idx_localOps_map[site_op_idx]
+
+            if !haskey(op2data.data[op_str], vs_left_tup)
+                error("Operator $op_str does not have a mapping for virtual space $vs_left_tup. val= $(factors[val])")
+            end
+            vs_right_list = keys(op2data.data[op_str][vs_left_tup])
+
+            # Filter vs_right_list to only include allowed virtual spaces
+            vs_idx_right_list = [vsQN_idx_map[vs] for vs in vs_right_list if vs in allowed_vs_right]
+            
+            for virtSpace_right in vs_idx_right_list
+                if haskey(vs_right_idx_dict, virtSpace_right)
+                    vs_right_offset = vs_right_idx_dict[virtSpace_right]
+                else
+                    push!(virtSpaces_right_arr, virtSpace_right)
+                    vs_right_offset = length(virtSpaces_right_arr)
+                    vs_right_idx_dict[virtSpace_right] = vs_right_offset
+                end
+                
+                entry = (vs_left_idx, vs_right_offset, site_op_idx, factors[val])
+                push!(site_entries, entry)
+            end
+            
         end
-        push!(new_table, reshape(vcat([length(virtSpaces_out)], term_col[col_idx]), 1, :))
-        push!(new_factor, 1.0)
+        for vs_right_idx in values(vs_right_idx_dict)
+            # Add the entry for this column
+            push!(new_table, reshape(vcat([vs_right_idx], term_col[col_idx]), 1, :))
+            push!(new_factor, 1.0)
+        end
     end
     
     table = vcat(new_table...)
 
     @assert size(table, 1) == length(new_factor) "Table length ($(length(table))) does not match factor length ($(length(new_factor)))"
 
-    return virtSpaces_out, table, new_factor
+    return site_entries, virtSpaces_right_arr, table, new_factor
 
 end
 
@@ -380,109 +396,7 @@ end
 
 
 """
-    VirtSpace
-
-A struct representing a virtual space with spin-up and spin-down quantum numbers.
-Used in MPO construction for quantum chemistry Hamiltonians.
-
-Fields:
-- qn1::Int: For non-spin symmetry, it represents the spin-up count. For spin symmetry, it represents the particle count "with id 1".
-- qn2::Int: For non-spin symmetry, it represents the spin-down count. For spin symmetry, it represents the particle count "with id 2".
-- factor::Float64: A scaling factor, defaults to 1.0
-- in_idx::Int: Input index
-- op_idx::Int: Operator index
-"""
-struct VirtSpace
-    qn1::Int # For non-spin symmetry, it represents the spin-up count. For spin symmetry, it represents the particle count "with id 1".
-    qn2::Int # For non-spin symmetry, it represents the spin-down count. For spin symmetry, it represents the particle count "with id 2".
-    factor::Float64
-    in_idx::Int
-    op_idx::Int
-    
-    # Constructors
-    VirtSpace() = new(0, 0, 1.0, 0, 0)
-    VirtSpace(qn1::Int, qn2::Int, factor::Number, in_idx::Int, op_idx::Int) = new(qn1, qn2, Float64(factor), in_idx, op_idx)
-end
-
-"""
-    apply_op(vs::VirtSpace, op::String, factor::Number, in_idx::Int, op_idx::Int)
-
-Notation: the input virtual space is on the left, so it is *outgoing*.
-Therefore, this outputs the input VirtSpace (from the right), such that after applying
-the local operator to the physical space, we get the VirtSpace from the left.
-This function also set new values for factor, in_idx, and op_idx.
-The string can be:
-- "I": Identity operator (leaves the VirtSpace unchanged)
-- A string of paired characters where each pair consists of:
-  - First character: "a" (annihilation) or "c" (creation)
-  - Second character: "↑" (spin up) or "↓" (spin down)
-  
-Examples:
-- "a↑": Annihilates a spin-up particle (reduces spinUp by 1).
-        The right virtual space will have one less spin-up particle than the left virtual space,
-        so that the input (from up) physical space will have one more spin-up particle than
-        the output (from down) physical space to mantain the symmetric structure while annihilating a spin-up particle.
-- "a↑c↓c↑": Complex sequence of operations, applied from left to right. In total, it increases the VS spinUp count by 1.
-
-Returns a new VirtSpace with the updated values.
-"""
-function apply_op(vs::VirtSpace, op_str::String, factor::Number, in_idx::Int, op_idx::Int)
-    # TODO: For the spin symmetric case, add information to the virtual index about the possible multiplicities. E.g. when op_str==aa (regardless if it's [1,2] or [2,1]), then the output QN (-1,-1) is not sufficient, as it also represents the (0, -2, 1) case, which cannot happen.
-    # If identity operator, return a new VirtSpace with updated factor, in_idx, and op_idx
-    if op_str == "I"
-        return VirtSpace(vs.qn1, vs.qn2, factor, in_idx, op_idx)
-    end
-    
-    # Make a copy to avoid modifying the original
-    qn1 = vs.qn1
-    qn2 = vs.qn2
-
-    chars = collect(op_str)
-    
-    # Process the string in pairs
-    for i in 1:2:length(chars)
-        op = chars[i]
-        op_qn = chars[i+1]
-        
-        if op == 'a'  # Annihilation
-            if op_qn == '↑' || op_qn == '1'
-                qn1 -= 1
-            elseif op_qn == '↓' || op_qn == '2'
-                qn2 -= 1
-            else
-                throw(ArgumentError("Invalid operator character: $op_qn. Expected '↑', '↓', '1', or '2'."))
-            end
-        elseif op == 'c'  # Creation
-            if op_qn == '↑' || op_qn == '1'
-                qn1 += 1
-            elseif op_qn == '↓' || op_qn == '2'
-                qn2 += 1
-            else
-                throw(ArgumentError("Invalid operator character: $op_qn. Expected '↑', '↓', '1', or '2'."))
-            end
-        else
-            throw(ArgumentError("Invalid operator character: $op. Expected 'a' (annihilation) or 'c' (creation)."))
-        end
-    end
-    
-    # Return new VirtSpace with the updated values
-    return VirtSpace(qn1, qn2, factor, in_idx, op_idx)
-end
-
-# String representation for printing
-function Base.show(io::IO, vs::VirtSpace)
-    if op_qn1 ∈ ('↑', '↓')
-        print(io, "VirtSpace(spinUp=$(vs.qn1), spinDown=$(vs.qn2), factor=$(vs.factor), in_idx=$(vs.in_idx), op_idx=$(vs.op_idx))")
-    else
-        # For non-spin symmetry, we just print the counts
-        print(io, "VirtSpace(qn1=$(vs.qn1), qn2=$(vs.qn2), factor=$(vs.factor), in_idx=$(vs.in_idx), op_idx=$(vs.op_idx))")
-    end
-
-end
-
-
-"""
-    compose_symbolic_site_sparse(virtSpace_in, virtSpace_out, primary_ops)
+    compose_symbolic_site_sparse(site_entries, virtSpace_left, virtSpace_right, idx_localOps_map)
 
 Create a sparse matrix representation of a quantum operator that maps between input and output virtual spaces.
 
@@ -490,44 +404,44 @@ This function composes a sparse matrix representation where each non-zero entry 
 of site operators. It is the sparse implementation counterpart to the dense operator composition function.
 
 # Arguments
-- `virtSpace_in`: Input virtual space - array of possible input states
-- `virtSpace_out`: Output virtual space - array of possible output states where each state contains
-  composed operators
-- `primary_ops`: Array of primary operators used in the composition
+  - `site_entries::Vector{Tuple{Int, Int, Int, Float64}}`: A vector of tuples where each tuple contains:
+  - `virtSpace_left`: The left virtual space indices.
+  - `virtSpace_right`: The right virtual space indices.
+  - `idx_localOps_map`: A mapping from operator indices to operator strings.
 
 # Returns
 - A sparse matrix of dimensions `(length(virtSpace_in), length(virtSpace_out))` where non-zero entries 
-  contain vectors of `SiteOp` objects multiplied by appropriate factors.
+  contain tuples of operator string with their appropriate factors.
 
 # Note
 The function tracks non-zero entries using explicit coordinate lists (COO format) and
 groups operators that map between the same input and output states.
 """
-function compose_symbolic_site_sparse(virtSpace_in, virtSpace_out, primary_ops)
+
+
+function compose_symbolic_site_sparse(site_entries, virtSpace_left, virtSpace_right, idx_localOps_map)
     # Use a dictionary to accumulate entries
     # Key: (row, col), Value: Vector of operators
-    entries = Dict{Tuple{Int,Int}, Vector{SiteOp}}()
+    entries = Dict{Tuple{Int,Int}, Vector{Tuple{String, Float64}}}()
     
     # For each output operator
-    for (ivs, vs_out) in enumerate(virtSpace_out)
+    for (vs_left_idx, vs_right_idx, op_idx, factor) in site_entries
         # For each composed operator in this output operator
-        for op in vs_out
-            position = (op.in_idx, ivs)
-            
-            # Create or retrieve the vector at this position
-            if !haskey(entries, position)
-                entries[position] = SiteOp[]
-            end
-            
-            # Add the operator
-            push!(entries[position], primary_ops[op.op_idx] * op.factor)
+        position = (vs_left_idx, vs_right_idx)
+        
+        # Create or retrieve the vector at this position
+        if !haskey(entries, position)
+            entries[position] = Tuple{String, Float64}[]
         end
+        
+        # Add the operator
+        push!(entries[position], (idx_localOps_map[op_idx], factor))
     end
     
     # Create a sparse matrix from the dictionary
     I = Int[]
     J = Int[]
-    V = Vector{SiteOp}[]
+    V = Vector{Tuple{String, Float64}}[]
     
     for ((i, j), ops) in entries
         push!(I, i)
@@ -535,5 +449,5 @@ function compose_symbolic_site_sparse(virtSpace_in, virtSpace_out, primary_ops)
         push!(V, ops)
     end
     
-    return sparse(I, J, V, length(virtSpace_in), length(virtSpace_out))
+    return SparseArrays.sparse(I, J, V, length(virtSpace_left), length(virtSpace_right))
 end

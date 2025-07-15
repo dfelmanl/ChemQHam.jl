@@ -48,3 +48,10 @@ mpo = symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm)
 ## Next major improvements:
 
 - **Build the ops table according to the virtual indexes when having spin symmetry**: When having spin symmetry, the virtual indexes are not unique, as they can represent multiple spin sectors. If we take each unique virtual space path individually, we will be able to allow for larger terms grouping, which results in a lower _minimum vertex cover_ for the bipartite algorithm.
+
+## Acknowledgments
+- **Dr. Philipp Schmoll** — for invaluable discussions and design insights throughout the development of this package.
+
+- **Prof. Yaron Oz** and the Tel Aviv University — for the trust and financial support during this project.
+
+- This package uses ideas from the **bipartite graph theory** algorithm described in [arXiv:2006.02056](https://arxiv.org/pdf/2006.02056) and implemented in the [Renormalizer](https://shuaigroup.github.io/Renormalizer/) project.

@@ -1,57 +1,41 @@
 
-# Convert ChemOpSum terms to an operator table (similar to Renormalizer's _terms_to_table)
-function terms_to_table(terms::ChemOpSum; n_sites::Int=0)
-    n_sites = n_sites > 0 ? n_sites : maximum(maximum.(getfield.(terms, :sites)))  # Determine number of sites if not provided
-    # TODO: Allow to get only `terms` and extract the number of sites from the terms themselves (maximum site location number).
+# Convert ChemOpSum terms to an operator table
+function terms_to_table(terms::ChemOpSum, op2data::Op2Data; n_sites::Int=0)
+    
+    # Determine number of sites if not provided
+    n_sites = n_sites > 0 ? n_sites : maximum(maximum.(getfield.(terms, :sites)))
+    
+    # Initialize the table where each row corresponds to a term
     table = Vector{Vector{Int}}()
     
-    # Factor list to store coefficients
+    # Factor list to store each term's coefficient
     factor_list = Vector{Float64}()
     
-    # Track primary operators at each site
-    primary_ops_eachsite = [Dict{SiteOp, Int}() for _ in 1:n_sites]
-    primary_ops = Vector{SiteOp}()
+    # Track all possible operators at each site
+    all_local_ops = get_all_local_ops_str(op2data.symm)
+    localOps_idx_map = Dict(op => i for (i, op) in enumerate(all_local_ops))
     
-    # Initialize index counter
-    index = 1
-    
-    # Create dummy table entry (identity operator indices for each site)
-    # TODO: CHECK: maybe SiteOp does not need to have a site index, as all operators are equally defined at all sites.
-    dummy_table_entry = Vector{Int}(undef, n_sites)
-    for site in 1:n_sites
-        op = SiteOp("I", site)  # Identity operator at this site
-        primary_ops_eachsite[site][op] = index
-        push!(primary_ops, op)
-        dummy_table_entry[site] = index
-        index += 1
-    end
-    
-    # Process each term in the ChemOpSum
+    # Create a mapping from virtual space indices to a unique index
+    vs_idx_map = get_vs_idx_map(op2data.symm)
+
+    dummy_table_entry = fill(localOps_idx_map["I"], n_sites)
+        
     for term in terms
+        
         coef = term.coefficient
         site_ops = group_operators_by_site(term)
-        
-        # Create a copy of the dummy table entry for this term
+
         table_entry = copy(dummy_table_entry)
         
-        # Process each operator in the term
+        # Process each site in the term
         for (op_str, site) in site_ops
-            
-            # Create a SiteOp for this operator
-            site_op = SiteOp(op_str, site)
-            
-            # If this operator is not in the primary_ops list for this site, add it
-            if !haskey(primary_ops_eachsite[site], site_op)
-                primary_ops_eachsite[site][site_op] = index
-                push!(primary_ops, site_op)
-                index += 1
-            end
-            
+
             # Update the table entry for this site
-            table_entry[site] = primary_ops_eachsite[site][site_op]
+            op_idx = localOps_idx_map[op_str]
+            table_entry[site] = op_idx
+
         end
-        
-        # Add the table entry and factor to our lists
+
         push!(table, table_entry)
         push!(factor_list, coef)
     end
@@ -59,10 +43,10 @@ function terms_to_table(terms::ChemOpSum; n_sites::Int=0)
     # Deduplicate table entries and combine factors
     table, factors = _deduplicate_table(table, factor_list)
     
-    # Convert table to matrix using stack or vcat/hcat
-    table = reduce(vcat, [row' for row in table])  # Using row transpose
+    # Convert table to matrix
+    table = reduce(vcat, [row' for row in table])
 
-    return table, primary_ops, factors
+    return table, factors, localOps_idx_map, vs_idx_map
 end
 
 
@@ -90,7 +74,6 @@ function group_operators_by_site(term::OpTerm)
 end
 
 
-# Helper function to deduplicate table entries and combine their factors
 function _deduplicate_table(table::Vector{Vector{Int}}, factor::Vector{Float64})
     # Create a dictionary to store unique table entries
     unique_entries = Dict{Vector{Int}, Float64}()

@@ -1,52 +1,4 @@
 
-# Define a structure to hold chemical properties
-struct ChemProperties
-    h1e::AbstractArray{Float64}  # One-electron integrals
-    h2e::AbstractArray{Float64}  # Two-electron integrals
-    e_nuc::Float64               # Nuclear repulsion energy
-    
-    function ChemProperties(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}, e_nuc::Float64=0.0)
-        new(h1e, h2e, e_nuc)
-    end
-end
-
-# Define a single-site operator
-struct SiteOp
-    coefficient::Number
-    operator::String  # Operator type like "a↑", "c↓", etc. # TODO: Change to op_str
-    site::Int         # Site index
-    
-    # Constructor with coefficient
-    SiteOp(coef::Number, op::String, site::Int) = new(coef, op, site)
-    
-    # Default constructor with coefficient = 1.0
-    SiteOp(op::String, site::Int) = new(1.0, op, site)
-end
-
-# Define equality for SiteOp (ignoring coefficient, just comparing operator and site)
-function Base.:(==)(a::SiteOp, b::SiteOp)
-    return a.operator == b.operator && a.site == b.site
-end
-
-# Define hash for SiteOp (ignoring coefficient for hash as well)
-function Base.hash(op::SiteOp, h::UInt)
-    return hash(op.operator, hash(op.site, h))
-end
-
-# Define multiplication for SiteOp
-function Base.:*(a::Number, op::SiteOp)
-    # Returns a new SiteOp with multiplied coefficient
-    return SiteOp(a * op.coefficient, op.operator, op.site)
-end
-
-# Commutative multiplication
-function Base.:*(op::SiteOp, a::Number)
-    return a * op
-end
-
-# Define zero for SiteOp to be able to display it
-Base.zero(::Type{Vector{SiteOp}}) = Vector{SiteOp}()
-
 # Define a term in the operator sum
 struct OpTerm
     coefficient::Number
@@ -200,14 +152,14 @@ function Base.show(io::IO, ::MIME"text/plain", ops::ChemOpSum)
 end
 
 
-gen_ChemOpSum(chem_data::ChemProperties, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(chem_data::ChemProperties; ord=ord, kwargs...)
-gen_ChemOpSum(chem_data::ChemProperties; n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=true, add_nuc::Bool=true) = gen_ChemOpSum(chem_data.h1e, chem_data.h2e, chem_data.e_nuc; n_sites=n_sites, ord=ord, tol=tol, spin_symm=spin_symm, add_nuc=add_nuc)
-gen_ChemOpSum(h1e, h2e, e_nuc; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, kwargs...)
-gen_ChemOpSum(h1e, h2e, e_nuc, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, ord=ord, kwargs...)
-gen_ChemOpSum(h1e, h2e, e_nuc, n_sites::Int; kwargs...) = gen_ChemOpSum(h1e, h2e; e_nuc=e_nuc, n_sites=n_sites, kwargs...)
+gen_ChemOpSum(molecule::Molecule; kwargs...) = gen_ChemOpSum(xyz_string(Molecule(molecule)); kwargs...)
+gen_ChemOpSum(mol_str::String; kwargs...) = gen_ChemOpSum(molecular_interaction_coefficients(molecule)...; kwargs...)
+gen_ChemOpSum(h1e, h2e, nuc_e; kwargs...) = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, kwargs...)
+gen_ChemOpSum(h1e, h2e, nuc_e, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, ord=ord, kwargs...)
+gen_ChemOpSum(h1e, h2e, nuc_e, n_sites::Int; kwargs...) = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, n_sites=n_sites, kwargs...)
 
-function gen_ChemOpSum(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; e_nuc=0.0, n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=true, add_nuc::Bool=true)
-    add_nuc || (e_nuc = 0.0)  # If add_nuc is false, set nuclear energy to 0
+function gen_ChemOpSum(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; nuc_e=0.0, n_sites=0, ord=nothing, tol=1e-14, spin_symm::Bool=true, add_nuc::Bool=true)
+    add_nuc || (nuc_e = 0.0)  # If add_nuc is false, set nuclear energy to 0
     if isnothing(ord)
         if n_sites > 0
             @assert size(h1e, 1) >= n_sites "Provided h1e size $(size(h1e)) does not match n_sites $(n_sites)"
@@ -223,24 +175,24 @@ function gen_ChemOpSum(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64};
 
     # Generate the ChemOpSum object from the Hamiltonian coefficients
     if spin_symm
-        # return _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=tol) # Unprocessed h1e and h2e
-        return _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=tol) # Always assume that h1e and h2e are already processed when they are passed to gen_ChemOpSum?
+        # return _gen_OpSum_SpinSymm(h1e, h2e, nuc_e, ord; tol=tol) # Unprocessed h1e and h2e
+        return _gen_OpSum_SpinSymm(h1e, h2e, nuc_e, ord; tol=tol) # Always assume that h1e and h2e are already processed when they are passed to gen_ChemOpSum?
     else
-        # return _gen_OpSum_noSpinSymm(h1e, h2e, e_nuc, ord; tol=tol)
-        return _gen_OpSum_noSpinSymm(h1e, h2e, e_nuc, ord; tol=tol)
+        # return _gen_OpSum_noSpinSymm(h1e, h2e, nuc_e, ord; tol=tol)
+        return _gen_OpSum_noSpinSymm(h1e, h2e, nuc_e, ord; tol=tol)
     end
 end
 
 # Generate the ChemOpSum object from the Hamiltonian coefficients:
-function _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
+function _gen_OpSum_SpinSymm(h1e, h2e, nuc_e, ord; tol=1e-14)
     N_spt = length(ord)
 
     os = ChemOpSum()
 
     # Nuclear energy term
-    if e_nuc != 0.0
+    if nuc_e != 0.0
         # Add the nuclear energy term as an identity operator on all sites
-        os += e_nuc, ["I"], [0]
+        os += nuc_e, ["I"], [0]
     end
 
     # One-interaction terms
@@ -271,7 +223,7 @@ function _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
                 if !(p == q && r == s)
                     cf *= 2
                 end
-                os += cf, "a1", p, "a2", q, "c2", r, "c1", s
+                os += cf, "a1", p, "a2", q, "c2", r, "c1", s # check if exists in the dict and flip
             end
         end
     end
@@ -279,6 +231,6 @@ function _gen_OpSum_SpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
 end
 
 
-function _gen_OpSum_noSpinSymm(h1e, h2e, e_nuc, ord; tol=1e-14)
+function _gen_OpSum_noSpinSymm(h1e, h2e, nuc_e, ord; tol=1e-14)
     throw(ErrorException("ChemOpSum generation without spin symmetry is not supported yet. Choose spin_symm=true instead."))
 end

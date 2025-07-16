@@ -29,25 +29,14 @@ using ChemQHam
 # Define the molecule
 molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
 
-# Define the symmetry. Currently only U1SU2 is supported.
-symm = "U1SU2"
-
-# Generate molecular integrals
-h1e, h2e, nuc_e = molecular_interaction_coefficients(molecule)
-
-# Convert to chemical operator sum
-op_terms = gen_ChemOpSum(h1e, h2e, nuc_e; tol=1e-8, spin_symm=true)
-
-# Construct optimized symbolic MPO
-symbolic_mpo, virt_spaces = construct_symbolic_mpo(op_terms)
-
-# Convert to TensorKit MPO with symmetry
-mpo = symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm)
+# Generates a SparseBlockTensorMap object with fZ ⊠ U(1) ⊠ SU(2) symmetry
+mpo = chemical_mpo(molecule)
 ```
 
 ## Next major improvements:
 
-- **Build the ops table according to the virtual indexes when having spin symmetry**: When having spin symmetry, the virtual indexes are not unique, as they can represent multiple spin sectors. If we take each unique virtual space path individually, we will be able to allow for larger terms grouping, which results in a lower _minimum vertex cover_ for the bipartite algorithm.
+- Place ITensors dependencies in a new testing environment.
+- Test if the sum of individual terms matrices equal the matrix from all terms together.
 
 ## Acknowledgments
 - **Dr. Philipp Schmoll** — for invaluable discussions and design insights throughout the development of this package.

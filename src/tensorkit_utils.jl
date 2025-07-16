@@ -1026,17 +1026,3 @@ function get_physical_abs_offsets(symm::String)
     
     return physical_offsets
 end
-
-
-chemical_mpo(molecule::Molecule; kwargs...) = chemical_mpo(xyz_string(Molecule(molecule)); kwargs...)
-chemical_mpo(mol_str::String; kwargs...) = chemical_mpo(molecular_interaction_coefficients(molecule)...; kwargs...)
-chemical_mpo(h1e, h2e, nuc_e; kwargs...) = chemical_mpo(h1e, h2e; nuc_e=nuc_e, kwargs...)
-
-function chemical_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; nuc_e::Float64=0.0, symm::String="U1SU2", algo::String="Hungarian", dataType::DataType=Float64, verbose::Bool=false)
-    op_terms = gen_ChemOpSum(h1e, h2e, nuc_e)
-    op2data = Op2Data(symm)
-    table, factors, localOps_idx_map, vsQN_idx_map = terms_to_table(op_terms, op2data)
-    symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; algo=algo, verbose=verbose)
-    mpo = symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm, vsQN_idx_map, op2data; verbose=verbose)
-    return mpo
-end

@@ -1,4 +1,3 @@
-
 """
     construct_symbolic_mpo
 The idea:
@@ -64,10 +63,15 @@ The local mpo is the transformation matrix between 0',1',2' to 0'',1''
 The local mpo is the transformation matrix between 0'',1'' to 0'''
 
 """
-function construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; algo="Hungarian", verbose=false)
 
+function construct_symbolic_mpo(table, factors, symm_context::AbstractSymmetryContext; algo="Hungarian", verbose=false)
+    
     n_sites = size(table, 2)
-
+    
+    # Get pre-computed mappings from symmetry context
+    localOps_idx_map = get_local_ops_idx_map(symm_context)
+    vsQN_idx_map = get_vs_idx_map(symm_context)
+    
     idx_vsQN_map = Dict(v => k for (k, v) in vsQN_idx_map)
     idx_localOps_map = Dict(v => k for (k, v) in localOps_idx_map)
     
@@ -93,7 +97,7 @@ function construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, 
         
         # Call the one_site function to process this site
         site_entries, virtSpace_right, table, factors = _construct_symbolic_mpo_one_site(
-            table_row, table_col, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, op2data; algo=algo
+            table_row, table_col, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, symm_context; algo=algo
         )
         
         # Update for next iteration
@@ -117,7 +121,6 @@ function construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, 
         push!(symbolic_mpo, symbolic_site)
     end
 
-
     # Calculate the virtual spaces' quantum numbers
     QNType = Tuple{Bool, Int, Rational{Int}} # Fix later to be defined by the symm obj
 
@@ -129,13 +132,14 @@ function construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, 
     # @assert all(length(unique(vs))==1 for vs_grp in mpoVs for vs in vs_grp)
     verbose && println("symbolic MPO's bond dimensions: $([length(vs) for vs in mpoVs])")
     
-    return symbolic_mpo, mpoVs, virtSpaces_list
+    return symbolic_mpo, mpoVs
 end
 
-function construct_symbolic_mpo(op_terms::ChemOpSum, op2data::Op2Data; kwargs...)
-    table, factors, localOps_idx_map, vsQN_idx_map = terms_to_table(op_terms, op2data)
-    return construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; kwargs...)
+function construct_symbolic_mpo(op_terms::ChemOpSum, symm_context::AbstractSymmetryContext; kwargs...)
+    table, factors = terms_to_table(op_terms, symm_context)
+    return construct_symbolic_mpo(table, factors, symm_context; kwargs...)
 end
+
 
 construct_symbolic_mpo(molecule::Molecule; kwargs...) = construct_symbolic_mpo(xyz_string(Molecule(molecule)); kwargs...)
 construct_symbolic_mpo(mol_str::String; kwargs...) = construct_symbolic_mpo(molecular_interaction_coefficients(molecule)...; kwargs...)
@@ -143,17 +147,18 @@ construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64},
 
 function construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; nuc_e::Float64=0.0, symm::String="U1SU2", ord=nothing, ops_tol=1e-14, maxdim=2^30, algo="Hungarian", spin_symm::Bool=true, verbose=false)
     
-    terms = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, n_sites=0, ord=ord, tol=ops_tol, spin_symm=spin_symm)
-    op2data = Op2Data(symm)
+    symm_ctx = create_symmetry_context(symm)
 
-    table, factors, localOps_idx_map, vsQN_idx_map = terms_to_table(terms, op2data)
-    symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; algo=algo, verbose=verbose)
+    op_terms = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, n_sites=0, ord=ord, tol=ops_tol, spin_symm=spin_symm)
+
+    table, factors = terms_to_table(op_terms, symm_ctx)
+    symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, factors, symm_ctx; algo=algo, verbose=verbose)
     
     return symbolic_mpo, virt_spaces
 end
 
 
-function _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, op2data; algo="Hungarian")
+function _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, symm_context; algo="Hungarian")
     # Find unique rows and their inverse mapping
     term_row, row_unique_inverseMap = find_unique_with_inverseMap(table_row)
     
@@ -166,7 +171,7 @@ function _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_left, 
     # Create a sparse matrix directly where non-zero values are indices into the factor array
     non_red = SparseArrays.sparse(row_unique_inverseMap, col_unique_inverseMap, 1:length(factors))
     
-    site_entries, virtSpaces_out, table, new_factor = _decompose_graph(term_row, term_col, non_red, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, op2data, algo)
+    site_entries, virtSpaces_out, table, new_factor = _decompose_graph(term_row, term_col, non_red, virtSpace_left, factors, idx_localOps_map, idx_vsQN_map, symm_context, algo)
     
     return site_entries, virtSpaces_out, table, new_factor
 end
@@ -196,12 +201,12 @@ Returns:
 Note: The Hungarian algorithm tends to produce more optimal MPO bond dimensions
       for quantum chemistry Hamiltonians, while "Hopcroft-Karp" is more time efficient.
 """
-function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, factors, idx_localOps_map, idx_vsQN_map, op2data, algo)
+function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, factors, idx_localOps_map, idx_vsQN_map, symm_context, algo)
     
     # Get dimensions directly from the sparse matrix
     n_rows, n_cols = size(non_red)
 
-    vsQN_idx_map = get_vs_idx_map(op2data.symm)
+    vsQN_idx_map = get_vs_idx_map(symm_context)
     
     # Use transpose to convert to CSC format and exploit efficient row access
     non_red_T = SparseArrays.sparse(transpose(non_red))  # Transpose converts CSC to CSR (effectively). TODO: Define it directly in CSR format (:rows as last argument) here by merging the two functions and having access to the inverseMaps. This allocates new data, so it might be better to calculate this in the caller function.
@@ -247,7 +252,7 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
         # Get the list of possible right virtual spaces for this left index and site operator
         vs_left_tup = idx_vsQN_map[virtSpace_left_arr[vs_left_idx]]
         op_str = idx_localOps_map[site_op_idx]
-        vs_right_list = [vsQN_idx_map[vs] for vs in keys(op2data.data[op_str][vs_left_tup])]
+        vs_right_list = [vsQN_idx_map[vs] for vs in keys(get_operator_data(symm_context, op_str)[vs_left_tup])]
         
         # Since we transposed the sparse matrix, we get the columns as rows.
         matched_cols_range = nzrange(non_red_T, row_idx)
@@ -257,7 +262,7 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
 
         for virtSpace_right in vs_right_list
 
-            allowed_vs_right_list = [[vsQN_idx_map[vs] for vs in keys(op2data.data[idx_localOps_map[term_col[sparse_rows_T[matched_col_idx]][1]]])] for matched_col_idx in matched_cols_range]
+            allowed_vs_right_list = [[vsQN_idx_map[vs] for vs in keys(get_operator_data(symm_context, idx_localOps_map[term_col[sparse_rows_T[matched_col_idx]][1]]))] for matched_col_idx in matched_cols_range]
             
             allowed_matched_idxs = findall(vs_allowed_by_col -> virtSpace_right in vs_allowed_by_col, allowed_vs_right_list)
             if isempty(allowed_matched_idxs)
@@ -297,7 +302,7 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
         # Create a multi-operator entry for this column
         
         next_op_str = idx_localOps_map[term_col[col_idx][1]]
-        allowed_vs_right = keys(op2data.data[next_op_str])
+        allowed_vs_right = keys(get_operator_data(symm_context, next_op_str))
 
         vs_right_idx_dict = Dict{Int, Int}()
         
@@ -307,10 +312,11 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
             vs_left_tup = idx_vsQN_map[virtSpace_left_arr[vs_left_idx]]
             op_str = idx_localOps_map[site_op_idx]
 
-            if !haskey(op2data.data[op_str], vs_left_tup)
+            op_data = get_operator_data(symm_context, op_str)
+            if !haskey(op_data, vs_left_tup)
                 error("Operator $op_str does not have a mapping for virtual space $vs_left_tup. val= $(factors[val])")
             end
-            vs_right_list = keys(op2data.data[op_str][vs_left_tup])
+            vs_right_list = keys(op_data[vs_left_tup])
 
             # Filter vs_right_list to only include allowed virtual spaces
             vs_idx_right_list = [vsQN_idx_map[vs] for vs in vs_right_list if vs in allowed_vs_right]

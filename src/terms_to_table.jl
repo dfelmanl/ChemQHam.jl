@@ -1,6 +1,6 @@
 
 # Convert ChemOpSum terms to an operator table
-function terms_to_table(terms::ChemOpSum, op2data::Op2Data; n_sites::Int=0)
+function terms_to_table(terms::ChemOpSum, symm_context::AbstractSymmetryContext; n_sites::Int=0)
     
     # Determine number of sites if not provided
     n_sites = n_sites > 0 ? n_sites : maximum(maximum.(getfield.(terms, :sites)))
@@ -10,14 +10,10 @@ function terms_to_table(terms::ChemOpSum, op2data::Op2Data; n_sites::Int=0)
     
     # Factor list to store each term's coefficient
     factor_list = Vector{Float64}()
-    
-    # Track all possible operators at each site
-    all_local_ops = get_all_local_ops_str(op2data.symm)
-    localOps_idx_map = Dict(op => i for (i, op) in enumerate(all_local_ops))
-    
-    # Create a mapping from virtual space indices to a unique index
-    vs_idx_map = get_vs_idx_map(op2data.symm)
 
+    # Get the symmetry context's local operators index mapping
+    localOps_idx_map = symm_context.local_ops_idx_map
+    
     dummy_table_entry = fill(localOps_idx_map["I"], n_sites)
         
     for term in terms
@@ -46,7 +42,7 @@ function terms_to_table(terms::ChemOpSum, op2data::Op2Data; n_sites::Int=0)
     # Convert table to matrix
     table = reduce(vcat, [row' for row in table])
 
-    return table, factors, localOps_idx_map, vs_idx_map
+    return table, factors
 end
 
 

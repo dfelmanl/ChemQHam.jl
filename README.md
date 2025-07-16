@@ -1,7 +1,7 @@
 # ChemQHam.jl
 
 <p align="center">
-  <img src="docs/images/ChemQHam_logo.png" alt="ChemQHam.jl Logo" width="200">
+  <img src="docs/images/ChemQHam_logo.png" alt="ChemQHam.jl Logo" width="300">
 </p>
 
 A Julia package for optimal quantum chemistry Hamiltonian construction in matrix product operator (MPO) form.
@@ -11,10 +11,10 @@ A Julia package for optimal quantum chemistry Hamiltonian construction in matrix
 ## Features
 
 - **Chemical Operator Sum Generation**: Convert quantum chemistry integrals to operator sums
-- **Optimized MPO Construction**: Uses bipartite graph theory methods for minimal bond dimension
 - **Minimal Hamiltonian terms**: Takes advantage of the symmetry in the two-electron interaction coefficients
+- **Optimized MPO Construction**: Uses bipartite graph theory methods for minimal bond dimension
 - **TensorKit Integration**: Convert to TensorKit tensor network format with symmetry support
-- **fZ⊗U₁⊗SU₂ Symmetry**: Currently supports U₁ particle number ⊗ SU₂ spin rotation symmetry on top of the fundamental fermionic parity
+- **fZ ⊠ U₁ ⊠ SU₂ Symmetry**: Currently supports U₁ particle number ⊗ SU₂ spin rotation symmetry on top of the fundamental fermionic parity
 - **ITensor Compatibility**: Interface with ITensorMPS and ITensorChemistry for testing
 
 ## Installation
@@ -49,14 +49,6 @@ If you use ChemQHam.jl in your research, please cite it as:
   year = {2025}
 }
 ```
-
-## Next steps:
-
-- Isolate ITensors dependencies in a new testing environment.
-- Test if the sum of individual terms matrices equal the matrix from all terms together.
-- Expand the symmetry support
-- Adding more backends
-- Write proper documentation
 
 ## Acknowledgments
 - **Dr. Philipp Schmoll** — for invaluable discussions and design insights throughout the development of this package.

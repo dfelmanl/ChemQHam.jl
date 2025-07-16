@@ -51,9 +51,9 @@ If you use ChemQHam.jl in your research, please cite it as:
 ```
 
 ## Acknowledgments
-- **Dr. Philipp Schmoll** — for invaluable discussions and design insights throughout the development of this package.
+- **[Dr. Philipp Schmoll](https://github.com/philihps)** — for invaluable discussions and design insights throughout the development of this package.
 
-- **Prof. Yaron Oz** and the Tel Aviv University — for the trust and financial support during this project.
+- **[Prof. Yaron Oz](https://english.tau.ac.il/profile/yaronoz)** and the Tel Aviv University — for the trust and financial support during this project.
 
 - This package uses ideas from the **bipartite graph theory** algorithm described in [arXiv:2006.02056](https://arxiv.org/pdf/2006.02056) and implemented in the [Renormalizer](https://shuaigroup.github.io/Renormalizer/) project.
 

@@ -22,14 +22,7 @@ molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
 terms = gen_ChemOpSum(h1e, h2e, nuc_e; tol=1e-8)
 
 # Convert to TensorKit MPO
-symm="U1SU2"
-algo="Hungarian"
-verbose=false
-op2data = Op2Data(symm)
-
-table, factors, localOps_idx_map, vsQN_idx_map = terms_to_table(terms, op2data)
-symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, factors, localOps_idx_map, vsQN_idx_map, op2data; algo=algo, verbose=false);
-mpo = symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, "u1su2", vsQN_idx_map, op2data; verbose=false)
+mpo = chemical_mpo(terms, "U1SU2"; algo="Hungarian", verbose=false)
 
 # Convert MPO to matrix
 it_mat = ITChem_mat(opsum)

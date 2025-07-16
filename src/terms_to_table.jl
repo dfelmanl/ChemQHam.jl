@@ -1,6 +1,6 @@
 
 # Convert ChemOpSum terms to an operator table
-function terms_to_table(terms::ChemOpSum, symm_context::AbstractSymmetryContext; n_sites::Int=0)
+function terms_to_table(terms::ChemOpSum, symm_ctx::AbstractSymmetryContext; n_sites::Int=0)
     
     # Determine number of sites if not provided
     n_sites = n_sites > 0 ? n_sites : maximum(maximum.(getfield.(terms, :sites)))
@@ -12,7 +12,7 @@ function terms_to_table(terms::ChemOpSum, symm_context::AbstractSymmetryContext;
     factor_list = Vector{Float64}()
 
     # Get the symmetry context's local operators index mapping
-    localOps_idx_map = symm_context.local_ops_idx_map
+    localOps_idx_map = symm_ctx.local_ops_idx_map
     
     dummy_table_entry = fill(localOps_idx_map["I"], n_sites)
         

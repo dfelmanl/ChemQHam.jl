@@ -1,5 +1,9 @@
 # ChemQHam.jl
 
+<p align="center">
+  <img src="docs/images/ChemQHam_logo.png" alt="ChemQHam.jl Logo" width="200">
+</p>
+
 A Julia package for optimal quantum chemistry Hamiltonian construction in matrix product operator (MPO) form.
 
 ⚠️ **This package is currently under active development** ⚠️
@@ -33,10 +37,26 @@ molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
 mpo = chemical_mpo(molecule)
 ```
 
-## Next major improvements:
+## Citation
 
-- Place ITensors dependencies in a new testing environment.
+If you use ChemQHam.jl in your research, please cite it as:
+
+```bibtex
+@software{ChemQHam.jl,
+  author = {Daniel Felman},
+  title = {ChemQHam.jl: Optimal Quantum Chemistry Hamiltonian Construction in MPO Form},
+  url = {https://github.com/dfelmanl/ChemQHam.jl},
+  year = {2025}
+}
+```
+
+## Next steps:
+
+- Isolate ITensors dependencies in a new testing environment.
 - Test if the sum of individual terms matrices equal the matrix from all terms together.
+- Expand the symmetry support
+- Adding more backends
+- Write proper documentation
 
 ## Acknowledgments
 - **Dr. Philipp Schmoll** — for invaluable discussions and design insights throughout the development of this package.
@@ -44,3 +64,7 @@ mpo = chemical_mpo(molecule)
 - **Prof. Yaron Oz** and the Tel Aviv University — for the trust and financial support during this project.
 
 - This package uses ideas from the **bipartite graph theory** algorithm described in [arXiv:2006.02056](https://arxiv.org/pdf/2006.02056) and implemented in the [Renormalizer](https://shuaigroup.github.io/Renormalizer/) project.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -21,26 +21,20 @@ Create a chemical MPO from a ChemOpSum.
 - Backend-specific numerical MPO
 """
 function chemical_mpo(op_terms::ChemOpSum,
-                     symm_context::AbstractSymmetryContext;
+                     symm_ctx::AbstractSymmetryContext;
                      backend::String="TensorKit",
                      algo::String="Hungarian",
                      dataType::DataType=Float64,
                      verbose::Bool=false)
     
     # Create symbolic MPO
-    symbolic_mpo, virt_spaces = construct_symbolic_mpo(op_terms, symm_context; algo=algo, verbose=verbose)
+    symbolic_mpo, virt_spaces = construct_symbolic_mpo(op_terms, symm_ctx; algo=algo, verbose=verbose)
     
     # Convert to numerical MPO based on backend
     if uppercase(backend) == "TENSORKIT"
-        vsQN_idx_map = get_vs_idx_map(symm_context)
-        symm_name = get_symmetry_name(symm_context)
-        
-        # For now, we still need to create Op2Data for compatibility with existing tensorkit functions
-        # TODO: Eventually update symbolic_to_tensorkit_mpo to use symmetry context directly
-        op2data = Op2Data(symm_name)
-        
+
         numerical_mpo = symbolic_to_tensorkit_mpo(
-            symbolic_mpo, virt_spaces, symm_name, vsQN_idx_map, op2data; 
+            symbolic_mpo, virt_spaces, symm_ctx; 
             dataType=dataType, verbose=verbose
         )
     else

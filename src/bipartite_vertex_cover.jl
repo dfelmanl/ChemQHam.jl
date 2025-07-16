@@ -38,7 +38,6 @@ function bipartite_vertex_cover_from_matchingV(bigraph, matchingV)
     #    - Vertices in V that are visited
     
     # Use iterative implementation to avoid recursion depth issues with large graphs
-    # This is equivalent to Renormalizer's new_konig() function (wait_u = set(range(nU)) - set(matchV))
     visitU = fill(false, nU)
     visitV = fill(false, nV)
     
@@ -84,7 +83,6 @@ end
 
 Implement the Hungarian algorithm for bipartite matching, which finds an optimal
 assignment between two sets of nodes in a bipartite graph.
-This is ported from Renormalizer's Python implementation (max_bipartite_matching2).
 
 Parameters:
 - bigraph: A bipartite graph represented as an array of arrays where bigraph[u] contains 
@@ -136,7 +134,6 @@ end
     compute_bipartite_vertex_cover(bigraph, algo)
 
 Compute a minimum vertex cover of a bipartite graph using the specified algorithm.
-This mimics Renormalizer's bipartite_vertex_cover function.
 
 Parameters:
 - bigraph: A bipartite graph represented as an adjacency list

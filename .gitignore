@@ -18,3 +18,4 @@ deps/deps.jl
 Thumbs.db
 
 notebooks/
+src/ChemHamiltonian.jl

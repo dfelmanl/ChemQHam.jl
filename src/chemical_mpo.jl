@@ -80,5 +80,8 @@ end
 
 # Additional convenience functions for different input types
 chemical_mpo(molecule::Molecule; kwargs...) = chemical_mpo(xyz_string(Molecule(molecule)); kwargs...)
-chemical_mpo(mol_str::String; kwargs...) = chemical_mpo(molecular_interaction_coefficients(mol_str)...; kwargs...)
+function chemical_mpo(mol_str::String; kwargs...)
+    h1e, h2e, nuc_e, hf_orb_occ_basis, hf_elec_occ, hf_energy = molecular_hf_data(mol_str)
+    return chemical_mpo(h1e, h2e, nuc_e; kwargs...)
+end
 chemical_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}, nuc_e::Float64; kwargs...) = chemical_mpo(h1e, h2e; nuc_e=nuc_e, kwargs...)

@@ -134,7 +134,10 @@ end
 
 
 construct_symbolic_mpo(molecule::Molecule; kwargs...) = construct_symbolic_mpo(xyz_string(Molecule(molecule)); kwargs...)
-construct_symbolic_mpo(mol_str::String; kwargs...) = construct_symbolic_mpo(molecular_interaction_coefficients(molecule)...; kwargs...)
+function construct_symbolic_mpo(mol_str::String; kwargs...)
+    h1e, h2e, nuc_e, hf_orb_occ_basis, hf_elec_occ, hf_energy = molecular_hf_data(mol_str)
+    return construct_symbolic_mpo(h1e, h2e, nuc_e; kwargs...)
+end
 construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}, nuc_e::Float64; kwargs...) = construct_symbolic_mpo(h1e, h2e; nuc_e=nuc_e, kwargs...)
 
 function construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; nuc_e::Float64=0.0, symm::String="U1SU2", ord=nothing, ops_tol=1e-14, algo="Hungarian", spin_symm::Bool=true, verbose=false)

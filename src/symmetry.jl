@@ -607,9 +607,7 @@ Generate the physical space based on the given symmetry type `symm`.
 function genPhySpace(symm)
     # FermionParity must always be imposed
     
-    if uppercase(symm) == "U1"
-        phySpace = Vect[(FermionParity ⊠ Irrep[U₁])]((0, 0) => 1, (1, 1) => 2, (0, 2) => 1)
-    elseif uppercase(symm) == "U1U1"
+    if uppercase(symm) == "U1U1"
         # (fParity, total count, spin count)
         phySpace = Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (1, 1, -1 // 2) => 1, (0, 2, 0) => 1)
     elseif uppercase(symm) == "U1SU2"

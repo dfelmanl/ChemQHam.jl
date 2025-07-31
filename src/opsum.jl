@@ -153,7 +153,10 @@ end
 
 
 gen_ChemOpSum(molecule::Molecule; kwargs...) = gen_ChemOpSum(xyz_string(Molecule(molecule)); kwargs...)
-gen_ChemOpSum(mol_str::String; kwargs...) = gen_ChemOpSum(molecular_interaction_coefficients(molecule)...; kwargs...)
+function gen_ChemOpSum(mol_str::String; kwargs...)
+    h1e, h2e, nuc_e, hf_orb_occ_basis, hf_elec_occ, hf_energy = molecular_hf_data(mol_str)
+    return gen_ChemOpSum(h1e, h2e, nuc_e; kwargs...)
+end
 gen_ChemOpSum(h1e, h2e, nuc_e; kwargs...) = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, kwargs...)
 gen_ChemOpSum(h1e, h2e, nuc_e, ord::Vector{Int}; kwargs...) = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, ord=ord, kwargs...)
 gen_ChemOpSum(h1e, h2e, nuc_e, n_sites::Int; kwargs...) = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, n_sites=n_sites, kwargs...)

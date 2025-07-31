@@ -28,7 +28,7 @@ export ChemOpSum, OpTerm, Molecule
 
 # Symbolic MPO related exports 
 export create_symmetry_context
-export molecular_interaction_coefficients, gen_ChemOpSum, terms_to_table, construct_symbolic_mpo
+export molecular_hf_data, gen_ChemOpSum, terms_to_table, construct_symbolic_mpo
 
 # TensorKit related exports
 export symbolic_to_tensorkit_mpo, mpo_to_mat

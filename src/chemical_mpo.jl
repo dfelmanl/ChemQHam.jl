@@ -22,8 +22,10 @@ Create a chemical MPO from a ChemOpSum.
 """
 function chemical_mpo(op_terms::ChemOpSum,
                      symm_ctx::AbstractSymmetryContext;
-                     backend::String="TensorKit",
                      algo::String="Hungarian",
+                     backend::String="TensorKit",
+                     merge_physical_idx::Bool=true,
+                     clockwise_incoming_indices::Bool=true,
                      dataType::DataType=Float64,
                      verbose::Bool=false)
     
@@ -34,7 +36,9 @@ function chemical_mpo(op_terms::ChemOpSum,
     if uppercase(backend) == "TENSORKIT"
 
         numerical_mpo = symbolic_to_tensorkit_mpo(
-            symbolic_mpo, virt_spaces, symm_ctx; 
+            symbolic_mpo, virt_spaces, symm_ctx;
+            merge_physical_idx=merge_physical_idx,
+            clockwise_incoming_indices=clockwise_incoming_indices,
             dataType=dataType, verbose=verbose
         )
     else

@@ -1,6 +1,6 @@
 using BlockTensorKit: ⊕
 
-function construct_empty_sparse_block_site(phySumSpace::SumSpace, left_vs::Vector{QN}, right_vs::Vector{QN}, symm::String) where QN
+function construct_empty_sparse_block_site(phySumSpace::SumSpace, left_vs::Vector{QN}, right_vs::Vector{QN}, symm::String; dataType::DataType=Float64) where QN
     """
     Construct an empty sparse block MPO site with the given quantum number multiplicities.
     
@@ -27,7 +27,7 @@ function construct_empty_sparse_block_site(phySumSpace::SumSpace, left_vs::Vecto
     end
 
     block_space = sum_Vspace_left ⊗ phySumSpace ← sum_Vspace_right ⊗ phySumSpace
-    empty_block_tensor = BlockTensorKit.spzeros(block_space)
+    empty_block_tensor = BlockTensorKit.spzeros(dataType, block_space)
 
     return empty_block_tensor
 end
@@ -97,9 +97,7 @@ function fill_mpo_site_U1U1!(mpo_site, symb_mpo_site, vs_map_left, vs_map_right,
 
 end
 
-symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm_ctx::AbstractSymmetryContext; kwargs...) = _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm_ctx; kwargs...)
-
-function _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm_ctx::AbstractSymmetryContext; dataType::DataType=Float64, verbose=false)
+function symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm_ctx::AbstractSymmetryContext; merge_physical_idx::Bool=true, clockwise_incoming_indices::Bool=true, dataType::DataType=Float64, verbose=false)
 
     mpo_sites = Vector{SparseBlockTensorMap}(undef, length(symbolic_mpo)) # Allocate TensorMap with the already known properties (type, shape, etc.)
 
@@ -113,7 +111,7 @@ function _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm_ctx::Abstrac
         vs_left = virt_spaces[isite]
         vs_right = virt_spaces[isite+1]
         
-        sblock_site = construct_empty_sparse_block_site(phySumSpace, vs_left, vs_right, symm_ctx.name)
+        sblock_site = construct_empty_sparse_block_site(phySumSpace, vs_left, vs_right, symm_ctx.name; dataType=dataType)
         
         if symm_ctx.name == "U1SU2"
             fill_mpo_site_SU2!(sblock_site, symb_mpo_site, vs_left, vs_right, symm_ctx, ftree_type, physical_abs_offsets; verbose=verbose)
@@ -125,6 +123,10 @@ function _symbolic_to_tensorkit_mpo(symbolic_mpo, virt_spaces, symm_ctx::Abstrac
         
         mpo_sites[isite] = sblock_site
     end
+
+    merge_physical_idx && merge_physical_idx!(mpo_sites, clockwise_codomain=false)
+
+    clockwise_incoming_indices && flip_incoming_indices!(mpo_sites)
 
     return mpo_sites
 end
@@ -190,4 +192,36 @@ function get_physical_abs_offsets(symm::String)
     physical_offsets = Dict(ftree_inner_data(phySumSpace[i].dims.keys[1])  => i for i in 1:length(phySumSpace))
     
     return physical_offsets
+end
+
+function merge_site_physical_idx(mpo_site::SparseBlockTensorMap; clockwise_codomain::Bool=false)
+    iso_dom = isometry(⊕(Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0)=>1, (1, 1, 1/2)=>1, (0, 2, 0)=>1)), ((Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0)=>1) ⊕ Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((1, 1, 1/2)=>1) ⊕ Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 2, 0)=>1))))
+    iso_codom = isometry(⊕(Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0)=>1, (1, 1, 1/2)=>1, (0, 2, 0)=>1)'), ((Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0)=>1)' ⊕ Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((1, 1, 1/2)=>1)' ⊕ Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 2, 0)=>1)')))
+    if clockwise_codomain
+        @tensor mpo_site_f_iso[-1,-2;-3,-4] := iso_dom[-2,1] * mpo_site[-1,1,2,-4] * iso_codom[-3,2]
+    else
+        @tensor mpo_site_f_iso[-1,-2;-3,-4] := iso_dom[-2,1] * mpo_site[-1,1,-3,2] * iso_codom[-4,2]
+    end
+    return SparseBlockTensorMap(mpo_site_f_iso)
+end
+
+function merge_physical_idx(mpo::Vector{<:SparseBlockTensorMap}; clockwise_codomain::Bool=false)
+    merger(site::SparseBlockTensorMap) = merge_site_physical_idx(site; clockwise_codomain=clockwise_codomain)
+    return merger.(mpo)
+end
+
+function merge_physical_idx!(mpo::Vector{<:SparseBlockTensorMap}; clockwise_codomain::Bool=false)
+    for i in eachindex(mpo)
+        mpo[i] = merge_site_physical_idx(mpo[i]; clockwise_codomain=clockwise_codomain)
+    end
+    return mpo
+end
+
+flip_incoming_indices(mpo_site::SparseBlockTensorMap) = TensorKit.permute(mpo_site, (1,2), (4,3))
+flip_incoming_indices(mpo::Vector{<:SparseBlockTensorMap}) = flip_incoming_indices.(mpo)
+function flip_incoming_indices!(mpo::Vector{<:SparseBlockTensorMap})
+    for i in eachindex(mpo)
+        mpo[i] = flip_incoming_indices(mpo[i])
+    end
+    return mpo
 end

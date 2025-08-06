@@ -202,7 +202,9 @@ function merge_site_physical_idx(mpo_site::SparseBlockTensorMap; clockwise_codom
     else
         @tensor mpo_site_f_iso[-1,-2;-3,-4] := iso_dom[-2,1] * mpo_site[-1,1,-3,2] * iso_codom[-4,2]
     end
-    return SparseBlockTensorMap(mpo_site_f_iso)
+    sb_TM = SparseBlockTensorMap(mpo_site_f_iso)
+    BlockTensorKit.dropzeros!(sb_TM)
+    return sb_TM
 end
 
 function merge_physical_idx(mpo::Vector{<:SparseBlockTensorMap}; clockwise_codomain::Bool=false)

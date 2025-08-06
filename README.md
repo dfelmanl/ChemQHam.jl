@@ -14,7 +14,7 @@ A Julia package for optimal quantum chemistry Hamiltonian construction in matrix
 - **Minimal Hamiltonian terms**: Takes advantage of the symmetry in the two-electron interaction coefficients
 - **Optimized MPO Construction**: Uses bipartite graph theory methods for minimal bond dimension
 - **TensorKit Integration**: Convert to TensorKit tensor network format with symmetry support
-- **fZ ⊠ U₁ ⊠ SU₂ Symmetry**: Currently supports U₁ particle number ⊗ SU₂ spin rotation symmetry on top of the fundamental fermionic parity
+- **[fZ ⊠ U₁ ⊠ SU₂] Symmetry**: Currently supports U₁ particle number ⊗ SU₂ spin rotation symmetry on top of the fundamental fermionic parity
 - **ITensor Compatibility**: Interface with ITensorMPS and ITensorChemistry for testing
 
 ## Installation
@@ -33,7 +33,7 @@ using ChemQHam
 # Define the molecule
 molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
 
-# Generates a SparseBlockTensorMap object with fZ ⊠ U(1) ⊠ SU(2) symmetry
+# Generates a SparseBlockTensorMap object with [fZ ⊠ U(1) ⊠ SU(2)] symmetry
 mpo = chemical_mpo(molecule)
 ```
 

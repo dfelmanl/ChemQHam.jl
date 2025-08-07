@@ -16,6 +16,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 TensorKit = "07d1fe3e-3e46-537d-9eac-e9e13d0d4cec"
+KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 
 [compat]
 BlockTensorKit = "0.1.9"
@@ -30,3 +31,4 @@ PythonCall = "0.9.25"
 SparseArrays = "1.11.0"
 TensorKit = "0.14.6"
 julia = "1.6"
+KrylovKit = "0.9"

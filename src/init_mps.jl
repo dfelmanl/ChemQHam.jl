@@ -1,20 +1,20 @@
 
-function mps_hf(phySpace::SumSpace, occHF_orbBasis, occHF_elCnt; dataType::DataType=Float64)
+function init_mps_hf(occHF_orbBasis, occHF_elCnt; symm::String="U1SU2", dataType::DataType=Float64)
     """
     Initialize a Hartree Fock state MPS, which is a product state (bond dimension 1).
     """
+    phy_sumspace = genFlattenedPhySpace(symm)
     N_spt = length(occHF_orbBasis)
     # construct virtual vector spaces for the MPS
     virtSpaces = Vector{SumSpace}(undef, N_spt + 1)
-    virtSpaces[1] = oneunit(phySpace)
+    virtSpaces[1] = oneunit(phy_sumspace)
     for siteIdx in 2:N_spt+1
         cummulative_n_el = sum(occHF_elCnt[1:siteIdx-1])
 
-        symm = TensorKit.type_repr(sectortype(phySpace))
-        if symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])"
+        if uppercase(symm) == "U1U1"
             fParity = cummulative_n_el % 2 == 0 ? 0 : 1
-            virtSpaces[siteIdx] = typeof(phySpace)((fParity, cummulative_n_el) => 1)
-        elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])"
+            virtSpaces[siteIdx] = SumSpace(Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])]((fParity, cummulative_n_el) => 1))
+        elseif uppercase(symm) == "U1SU2"
             fParity = cummulative_n_el % 2 == 0 ? 0 : 1
             spin = fParity == 0 ? 0 : 1//2 # TODO: Fix this. The spin might not be always binary. We should get this from the getHFocc function
             virtSpaces[siteIdx] = SumSpace(Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((fParity, cummulative_n_el, spin) => 1))
@@ -30,7 +30,7 @@ function mps_hf(phySpace::SumSpace, occHF_orbBasis, occHF_elCnt; dataType::DataT
         virtSpaceL = virtSpaces[siteIdx]
         virtSpaceR = virtSpaces[siteIdx + 1]
 
-        block_space = virtSpaceL ⊗ phySpace ← virtSpaceR
+        block_space = virtSpaceL ⊗ phy_sumspace ← virtSpaceR
         btm = zeros(block_space)
 
         physical_offset = occHF_orbBasis[siteIdx] == 4 ? 3 : occHF_orbBasis[siteIdx]
@@ -50,29 +50,29 @@ function mps_hf(phySpace::SumSpace, occHF_orbBasis, occHF_elCnt; dataType::DataT
     return initialTensors
 end
 
-function initMPS(phySpace::SumSpace, N_spt::Int, N_el::Int, spin; removeDegeneracy::Bool=true, dataType::DataType=Float64)
+function init_mps_rand(N_spt::Int, N_el::Int, spin; symm::String="U1SU2", removeDegeneracy::Bool=true, dataType::DataType=Float64)
     # Think about better ways to cutoff virtual BD states: with randomization / including different states accross MPSs
     """
     Initialize a random MPS with all bond dimensions.
     """
-    # construct physical and virtual vector spaces for the MPS
-    boundarySpaceL = oneunit(phySpace);
-    symm = TensorKit.type_repr(sectortype(phySpace))
-    if symm == "(FermionParity ⊠ Irrep[U₁])"
-        boundarySpaceR = Vect[(FermionParity ⊠ Irrep[U₁])]((N_el % 2, N_el) => 1)
-    elseif symm == "(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])"
+    phy_sumspace = genFlattenedPhySpace(symm)
+    boundarySpaceL = oneunit(phy_sumspace)
+
+    if uppercase(symm) == "U1U1"
+        boundarySpaceR = SumSpace(Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])]((N_el % 2, N_el, spin) => 1))
+    elseif uppercase(symm) == "U1SU2"
         boundarySpaceR = SumSpace(Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((N_el % 2, N_el, spin) => 1))
     else
-        error("Symmetry type $auxVecSpace not supported")
+        error("Symmetry type $symm not supported")
     end
 
-    virtSpaces = constructVirtSpaces(phySpace, N_spt, boundarySpaceL, boundarySpaceR;
+    virtSpaces = constructVirtSpaces(phy_sumspace, N_spt, boundarySpaceL, boundarySpaceR;
                                     removeDegeneracy = removeDegeneracy);
 
     # initialize random MPS
     initialTensors = Vector{BlockTensorMap}(undef, N_spt);
     for siteIdx in 1:N_spt
-        initialTensors[siteIdx] = randn(dataType, virtSpaces[siteIdx] ⊗ phySpace,
+        initialTensors[siteIdx] = randn(dataType, virtSpaces[siteIdx] ⊗ phy_sumspace,
                                         virtSpaces[siteIdx + 1])
     end
 

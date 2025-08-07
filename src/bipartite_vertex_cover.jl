@@ -103,7 +103,6 @@ function hungarian_max_bipartite_matching(bigraph)
     end
     
     # Initialize match array for vertices in V with size nV
-    # In Julia indices start at 1, but we need to access the index with the max value found
     match = Vector{Union{Int, Nothing}}(undef, nV)
     fill!(match, nothing)
     

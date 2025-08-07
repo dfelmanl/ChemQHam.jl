@@ -2,14 +2,10 @@
 # It is based on a private repository by Dr. Philipp Schmoll (https://github.com/philihps) and it was adapted for the current project.
 
 # using HTTN
-using KrylovKit
-using Printf
-using MPSKit
-using TensorKit
-using BlockTensorKit
-using BlockTensorKit: ⊕
-using SparseArrays
-using LinearAlgebra
+# using KrylovKit
+# using MPSKit
+# using Printf
+# using BlockTensorKit: ⊕
 
 @kwdef struct DMRGCONFIG
     bondDim::Int64 = 10
@@ -25,7 +21,7 @@ end
 
 # function initDMRG(mps::Vector{SparseBlockTensorMap}, H_mpo::Vector{SparseBlockTensorMap}; dmrg_sweeps::Int=10, ovlp_opt::Bool=false,
 # ovlp_weight::Float64=2.0, phis::Vector{SparseMPS}=SparseMPS[], mps_maxdim::Int=32, truncErr::Float64=1e-8, verbose::Bool=false)
-function initDMRG(mps::Vector{BlockTensorMap}, H_mpo::Vector{SparseBlockTensorMap}; dmrg_sweeps::Int=10, ovlp_opt::Bool=false,
+function dmrg(mps::Vector{BlockTensorMap}, H_mpo::Vector{SparseBlockTensorMap}; dmrg_sweeps::Int=10, ovlp_opt::Bool=false,
                 ovlp_weight::Float64=2.0, phis::Vector{Vector{BlockTensorMap}}=Vector{BlockTensorMap}[], mps_maxdim::Int=32, truncErr::Float64=1e-8, verbose::Bool=false)
     """
     Initialize MPS with DMRG.
@@ -40,7 +36,7 @@ function initDMRG(mps::Vector{BlockTensorMap}, H_mpo::Vector{SparseBlockTensorMa
                         ovlpPenalty = ovlp_weight
                         ))
     else
-        # Take DMRGCONFIG definition to the main script and apply initDMRG at a higher level, as it doesn't depend on hf_init
+        # Take DMRGCONFIG definition to the main script and apply dmrg at a higher level, as it doesn't depend on hf_init
         mps, gsE = find_groundstate_wMaxdim(mps, H_mpo,
                             DMRGCONFIG(; bondDim = mps_maxdim,
                             truncErr = truncErr, # truncErr=0. means truncation is only done by maxdim
@@ -230,10 +226,7 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
             # energyConvergenceA = norm(newEigsEnergies .- oldEigsEnergies) / length(finiteMPS);
             # display([energyConvergence energyConvergenceA maximum(ϵs)])
             alg.verbose > 0 &&
-                @printf("DMRG step %d ; energy = %0.8f ; convergence = %0.8e\n",
-                        loopCounter,
-                        mpoExpVal,
-                        energyConvergence)
+                println("DMRG step $(loopCounter) ; energy = $(round(mpoExpVal, digits=8)) ; convergence = $(round(energyConvergence, digits=8))")
             if energyConvergence < alg.convTolE || loopCounter >= alg.maxSweeps
                 runOptimizationDMRG = false
             end
@@ -246,7 +239,7 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
 
         # compute energy variance ⟨(H - E)^2⟩
         energyVariance = variance_mpo(finiteMPS, finiteMPO; trunc_err = alg.truncErr)
-        alg.verbose && @printf("Energy variance ⟨ψ|(H - E)^2|ψ⟩ = %0.4e\n", energyVariance)
+        alg.verbose && alg.verbose && println("Energy variance ⟨ψ|(H - E)^2|ψ⟩ = $(round(energyVariance, digits=4, sigdigits=4))")
 
         # re-randomize finiteMPS if non-eigenstate was found
         # if energyVariance > 1e-0

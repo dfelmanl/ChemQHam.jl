@@ -10,6 +10,10 @@ using SparseArrays
 using DataStructures
 using PythonCall
 using Combinatorics
+using KrylovKit
+# using MPSKit
+using BlockTensorKit: ⊕
+using TensorKit: space
 
 # Include files in dependency order
 include("symmetry.jl")
@@ -21,6 +25,8 @@ include("construct_symbolic_mpo.jl")
 include("tensorkit_utils.jl")
 include("chemical_mpo.jl")
 include("itensors_utils.jl")
+include("dmrg.jl")
+include("init_mps.jl")
 
 
 # Export types
@@ -35,6 +41,9 @@ export symbolic_to_tensorkit_mpo, mpo_to_mat
 
 # The main function
 export chemical_mpo
+
+# DMRG related exports
+export init_mps_hf, init_mps_rand, dmrg, dotMPS
 
 # ITensors related exports
 export ITChem_opsum, ITChem_mat

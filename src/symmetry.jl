@@ -11,15 +11,9 @@ abstract type AbstractLocalOps{T} end
 
 function FusionTreeDataType(QNType)
     return Tuple{
-        Tuple{Tuple{QNType, QNType}, 
-              QNType, 
-              Tuple{Bool, Bool}, 
-              Tuple{}},
-        Tuple{Tuple{QNType, QNType}, 
-              QNType, 
-              Tuple{Bool, Bool}, 
-              Tuple{}},
-        Float64
+        Tuple{Tuple{QNType,QNType},QNType,Tuple{Bool,Bool},Tuple{}},
+        Tuple{Tuple{QNType,QNType},QNType,Tuple{Bool,Bool},Tuple{}},
+        Float64,
     }
 end
 
@@ -39,37 +33,49 @@ struct U1SU2SymmetryContext{qn_type} <: AbstractSymmetryContext
     qn_type::DataType
     is_spin_symm::Bool
     operators::AbstractLocalOps{Float64}
-    operator_data::Dict{String, Dict{Tuple{qn_type, Int}, Dict{Tuple{qn_type, Int}, Vector{FusionTreeDataType(qn_type)}}}}
-    local_ops_idx_map::Dict{String, Int}
-    idx_local_ops_map::Dict{Int, String}
-    vsQN_idx_map::Dict{Tuple{qn_type, Int}, Int}
-    idx_vsQN_map::Dict{Int, Tuple{qn_type, Int}}
+    operator_data::Dict{
+        String,
+        Dict{
+            Tuple{qn_type,Int},
+            Dict{Tuple{qn_type,Int},Vector{FusionTreeDataType(qn_type)}},
+        },
+    }
+    local_ops_idx_map::Dict{String,Int}
+    idx_local_ops_map::Dict{Int,String}
+    vsQN_idx_map::Dict{Tuple{qn_type,Int},Int}
+    idx_vsQN_map::Dict{Int,Tuple{qn_type,Int}}
     all_local_ops::Vector{String}
-    is_filled::Dict{String, Bool}
-    
-    function U1SU2SymmetryContext(; fill_data::Bool=true)
+    is_filled::Dict{String,Bool}
+
+    function U1SU2SymmetryContext(; fill_data::Bool = true)
         name = "U1SU2"
-        qn_type = Tuple{Bool, Int, Rational{Int}}
+        qn_type = Tuple{Bool,Int,Rational{Int}}
         is_spin_symm = true
-        
+
         # Initialize operators
         ops = get_cr_an_local_ops_U1SU2()
         ops = LocalOps_SpinSymm(ops)
-        
+
         # Get all local operator strings
         all_local_ops = get_all_local_ops_str(name)
-        
+
         # Create local operators index mapping
         local_ops_idx_map = Dict(op => i for (i, op) in enumerate(all_local_ops))
         idx_local_ops_map = Dict(v => k for (k, v) in local_ops_idx_map)
-        
+
         # Create virtual space index mapping
         vsQN_idx_map = get_virt_space_idx_map_U1SU2()
         idx_vsQN_map = Dict(v => k for (k, v) in vsQN_idx_map)
-        
+
         # Initialize operator data dictionary
-        OpDataDict = Dict{String, Dict{Tuple{qn_type, Int}, Dict{Tuple{qn_type, Int}, Vector{FusionTreeDataType(qn_type)}}}}
-        
+        OpDataDict = Dict{
+            String,
+            Dict{
+                Tuple{qn_type,Int},
+                Dict{Tuple{qn_type,Int},Vector{FusionTreeDataType(qn_type)}},
+            },
+        }
+
         # Fill the operator data dictionary if requested
         if fill_data
             operator_data = OpDataDict()
@@ -82,18 +88,30 @@ struct U1SU2SymmetryContext{qn_type} <: AbstractSymmetryContext
             operator_data = OpDataDict()
             is_filled = Dict(op => false for op in all_local_ops)
         end
-        
-        return new{qn_type}(name, qn_type, is_spin_symm, ops, operator_data, local_ops_idx_map, idx_local_ops_map, vsQN_idx_map, idx_vsQN_map, all_local_ops, is_filled)
+
+        return new{qn_type}(
+            name,
+            qn_type,
+            is_spin_symm,
+            ops,
+            operator_data,
+            local_ops_idx_map,
+            idx_local_ops_map,
+            vsQN_idx_map,
+            idx_vsQN_map,
+            all_local_ops,
+            is_filled,
+        )
     end
 end
 
 # Helper function to compute virtual space index mapping for U1SU2
 function get_virt_space_idx_map_U1SU2()
     vs_dict = get_full_virt_space_multiplicities_U1SU2()
-    vsQN_idx_map = Dict{Tuple{Tuple{Bool, Int, Rational{Int}}, Int}, Int}()
+    vsQN_idx_map = Dict{Tuple{Tuple{Bool,Int,Rational{Int}},Int},Int}()
     idx = 1
     for (qn, mult) in vs_dict
-        for i in 1:mult
+        for i = 1:mult
             vsQN_idx_map[(qn, i)] = idx
             idx += 1
         end
@@ -103,21 +121,21 @@ end
 
 function get_full_virt_space_multiplicities_U1SU2()
     # IMPORTANT: the trivial space ((0, 0, 0), 1) must be mapped to 1, so we make use of OrderedDict to assure that 
-    vs_dict = OrderedDict{Tuple{Bool, Int, Rational{Int}}, Int}(
-                (0, 0, 0)=>2, 
-                (0, 0, 1)=>1, 
-                (1, 1, 1/2)=>2, 
-                (1, -1, 1/2)=>2, 
-                (0, 2, 0)=>1, 
-                (0, -2, 0)=>1, 
-                (0, 2, 1)=>1, 
-                (0, -2, 1)=>1
-            )
+    vs_dict = OrderedDict{Tuple{Bool,Int,Rational{Int}},Int}(
+        (0, 0, 0)=>2,
+        (0, 0, 1)=>1,
+        (1, 1, 1/2)=>2,
+        (1, -1, 1/2)=>2,
+        (0, 2, 0)=>1,
+        (0, -2, 0)=>1,
+        (0, 2, 1)=>1,
+        (0, -2, 1)=>1,
+    )
     return vs_dict
 end
 
 # Define the U1SU2 local operators
-function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
+function get_cr_an_local_ops_U1SU2(; dataType::DataType = Float64)
     """ Generate local operators for the Hamiltonian """
     # Creation and annilihation operator for spin-1/2 multiplet (spinUp and spinDown)
     # Notes:
@@ -128,7 +146,7 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
     # - The creation/annihilation operators are constructed by iterating over the fusion trees of the complete space (virt⊗phy ⊗ virt⊗phy) that increase/decrease the U1 total count by 1,
     #   then building a "one-hot" tensormap and converting it to its array representation. The fusiontree intersection value is defined by the coefficient that would result in a +1 value in the array representation
     #   for creating/annihilating a spinUp electron (from |∅> to |↑> or from |↑> to |∅>) in the physical space. This coefficient would be the inverse of the Glebsch Gordan coefficient for the fusion tree intersection.
-    
+
     # 16 virtual states:
     # 1: (0, 0, 0)      |∅>
     # 2: (0, 0, 1) m=1  |↑>-|↓>
@@ -146,32 +164,96 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
     # 14: (0, -2, 1)    -|↓↓> m=+1
     # 15: (0, -2, 1)    (-|↑↑> + -|↓↓>) / √2 m=0 (spin pointing in the -Y direction in xy-plane?)
     # 16: (0, -2, 1)    -|↑↑> m=-1
-    
-    virt_space_dict = get_full_virt_space_multiplicities_U1SU2()
-    auxVecSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])](virt_space_dict...)
 
-    
+    virt_space_dict = get_full_virt_space_multiplicities_U1SU2()
+    auxVecSpace = Vect[(FermionParity⊠Irrep[U₁]⊠Irrep[SU₂])](virt_space_dict...)
+
+
     # CREATION OPERATOR
 
     crOp_ftree_nzdata = [
-        ((((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), (((0, 0, 0.0), (0, 0, 0.0)), (0, 0, 0.0), (false, false), ()), [sqrt(2) 0; 0 1])
-        ((((0, -2, 0.0), (0, 2, 0.0)), (0, 0, 0.0), (false, false), ()), (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), [0 -1])
-        ((((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()), (((0, 0, 1.0), (0, 0, 0.0)), (0, 0, 1.0), (false, false), ()), [0; 1.0])
-        ((((0, -2, 1.0), (0, 2, 0.0)), (0, 0, 1.0), (false, false), ()), (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()), [0 -1.0])
-        ((((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), (((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()), [1.0 0; 0 1/sqrt(2)])
-        ((((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), (((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()), [0 sqrt(3/2)])
-        ((((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()), (((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), [-1.0 0; 0 -1/sqrt(2)])
-        ((((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()), (((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), [0; sqrt(3/2)])
-        ((((0, -2, 0.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()), (((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()), [0 -1/sqrt(2)])
-        ((((0, -2, 1.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()), (((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()), [0 sqrt(3/2)])
-        ((((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()), (((0, 2, 0.0), (0, 0, 0.0)), (0, 2, 0.0), (false, false), ()), [0; -1])
-        ((((0, 0, 0.0), (0, 2, 0.0)), (0, 2, 0.0), (false, false), ()), (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()), [sqrt(2) 0; 0 1])
-        ((((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()), (((0, 2, 1.0), (0, 0, 0.0)), (0, 2, 1.0), (false, false), ()), [0; 1.0])
-        ((((0, 0, 1.0), (0, 2, 0.0)), (0, 2, 1.0), (false, false), ()), (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()), [0 -1.0])
-        ((((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()), (((0, 2, 0.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()), [0; 1/sqrt(2)])
-        ((((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()), (((0, 2, 1.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()), [0; sqrt(3/2)])
-        ]
-    
+        (
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()),
+            (((0, 0, 0.0), (0, 0, 0.0)), (0, 0, 0.0), (false, false), ()),
+            [sqrt(2) 0; 0 1],
+        )
+        (
+            (((0, -2, 0.0), (0, 2, 0.0)), (0, 0, 0.0), (false, false), ()),
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()),
+            [0 -1],
+        )
+        (
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()),
+            (((0, 0, 1.0), (0, 0, 0.0)), (0, 0, 1.0), (false, false), ()),
+            [0; 1.0],
+        )
+        (
+            (((0, -2, 1.0), (0, 2, 0.0)), (0, 0, 1.0), (false, false), ()),
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()),
+            [0 -1.0],
+        )
+        (
+            (((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            (((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()),
+            [1.0 0; 0 1/sqrt(2)],
+        )
+        (
+            (((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            (((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()),
+            [0 sqrt(3/2)],
+        )
+        (
+            (((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()),
+            (((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            [-1.0 0; 0 -1/sqrt(2)],
+        )
+        (
+            (((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()),
+            (((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            [0; sqrt(3/2)],
+        )
+        (
+            (((0, -2, 0.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()),
+            (((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()),
+            [0 -1/sqrt(2)],
+        )
+        (
+            (((0, -2, 1.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()),
+            (((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()),
+            [0 sqrt(3/2)],
+        )
+        (
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()),
+            (((0, 2, 0.0), (0, 0, 0.0)), (0, 2, 0.0), (false, false), ()),
+            [0; -1],
+        )
+        (
+            (((0, 0, 0.0), (0, 2, 0.0)), (0, 2, 0.0), (false, false), ()),
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()),
+            [sqrt(2) 0; 0 1],
+        )
+        (
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()),
+            (((0, 2, 1.0), (0, 0, 0.0)), (0, 2, 1.0), (false, false), ()),
+            [0; 1.0],
+        )
+        (
+            (((0, 0, 1.0), (0, 2, 0.0)), (0, 2, 1.0), (false, false), ()),
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()),
+            [0 -1.0],
+        )
+        (
+            (((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()),
+            (((0, 2, 0.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()),
+            [0; 1/sqrt(2)],
+        )
+        (
+            (((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()),
+            (((0, 2, 1.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()),
+            [0; sqrt(3/2)],
+        )
+    ]
+
     phySpace = genPhySpace("U1SU2")
     ftree_type = FusionTree{sectortype(typeof(phySpace))}
     crOp = zeros(dataType, auxVecSpace ⊗ phySpace, auxVecSpace ⊗ phySpace)
@@ -182,36 +264,100 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
 
         if vs_right == (0, 0, 1.0)
             # Flip sign to the first col (0,0,1)_1 # Imposes anticommutivity in the (0,0,1)_1 virtual space, i.e. a particle and a hole with opposite signs.
-            ftree_array[:,1] *= -1
+            ftree_array[:, 1] *= -1
         elseif vs_right == (0, 0, 0.0)
             # Flip sign to the second col (0,0,0)_2 # Imposes anticommutivity in the (0,0,0)_2 virtual space, i.e. a particle and a hole with equal signs.
-            ftree_array[:,2] *= -1
+            ftree_array[:, 2] *= -1
         end
 
 
-        crOp[ftree_type(f1...), ftree_type(f2...)][:,1,:,1] = ftree_array
+        crOp[ftree_type(f1...), ftree_type(f2...)][:, 1, :, 1] = ftree_array
     end
 
 
     # ANNIHILATION OPERATOR
 
     anOp_ftree_nzdata=[
-        ((((0, 0, 0.0), (0, 0, 0.0)), (0, 0, 0.0), (false, false), ()), (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), [sqrt(2) 0; 0 1])
-        ((((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()), (((0, -2, 0.0), (0, 2, 0.0)), (0, 0, 0.0), (false, false), ()), [0; -1])
-        ((((0, 0, 1.0), (0, 0, 0.0)), (0, 0, 1.0), (false, false), ()), (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()), [0 1.0])
-        ((((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()), (((0, -2, 1.0), (0, 2, 0.0)), (0, 0, 1.0), (false, false), ()), [0; -1.0])
-        ((((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()), (((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), [1.0 0; 0 1/sqrt(2)])
-        ((((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()), (((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), [0; sqrt(3/2)])
-        ((((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), (((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()), [-1.0 0; 0 -1/sqrt(2)])
-        ((((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()), (((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()), [0 sqrt(3/2)])
-        ((((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()), (((0, -2, 0.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()), [0; -1/sqrt(2)])
-        ((((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()), (((0, -2, 1.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()), [0; sqrt(3/2)])
-        ((((0, 2, 0.0), (0, 0, 0.0)), (0, 2, 0.0), (false, false), ()), (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()), [0 -1])
-        ((((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()), (((0, 0, 0.0), (0, 2, 0.0)), (0, 2, 0.0), (false, false), ()), [sqrt(2) 0; 0 1])
-        ((((0, 2, 1.0), (0, 0, 0.0)), (0, 2, 1.0), (false, false), ()), (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()), [0 1.0])
-        ((((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()), (((0, 0, 1.0), (0, 2, 0.0)), (0, 2, 1.0), (false, false), ()), [0; -1.0])
-        ((((0, 2, 0.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()), (((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()), [0 1/sqrt(2)])
-        ((((0, 2, 1.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()), (((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()), [0 sqrt(3/2)])
+        (
+            (((0, 0, 0.0), (0, 0, 0.0)), (0, 0, 0.0), (false, false), ()),
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()),
+            [sqrt(2) 0; 0 1],
+        )
+        (
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 0.0), (false, false), ()),
+            (((0, -2, 0.0), (0, 2, 0.0)), (0, 0, 0.0), (false, false), ()),
+            [0; -1],
+        )
+        (
+            (((0, 0, 1.0), (0, 0, 0.0)), (0, 0, 1.0), (false, false), ()),
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()),
+            [0 1.0],
+        )
+        (
+            (((1, -1, 0.5), (1, 1, 0.5)), (0, 0, 1.0), (false, false), ()),
+            (((0, -2, 1.0), (0, 2, 0.0)), (0, 0, 1.0), (false, false), ()),
+            [0; -1.0],
+        )
+        (
+            (((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()),
+            (((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            [1.0 0; 0 1/sqrt(2)],
+        )
+        (
+            (((1, 1, 0.5), (0, 0, 0.0)), (1, 1, 0.5), (false, false), ()),
+            (((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            [0; sqrt(3/2)],
+        )
+        (
+            (((0, 0, 0.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            (((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()),
+            [-1.0 0; 0 -1/sqrt(2)],
+        )
+        (
+            (((0, 0, 1.0), (1, 1, 0.5)), (1, 1, 0.5), (false, false), ()),
+            (((1, -1, 0.5), (0, 2, 0.0)), (1, 1, 0.5), (false, false), ()),
+            [0 sqrt(3/2)],
+        )
+        (
+            (((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()),
+            (((0, -2, 0.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()),
+            [0; -1/sqrt(2)],
+        )
+        (
+            (((1, -1, 0.5), (0, 0, 0.0)), (1, -1, 0.5), (false, false), ()),
+            (((0, -2, 1.0), (1, 1, 0.5)), (1, -1, 0.5), (false, false), ()),
+            [0; sqrt(3/2)],
+        )
+        (
+            (((0, 2, 0.0), (0, 0, 0.0)), (0, 2, 0.0), (false, false), ()),
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()),
+            [0 -1],
+        )
+        (
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 0.0), (false, false), ()),
+            (((0, 0, 0.0), (0, 2, 0.0)), (0, 2, 0.0), (false, false), ()),
+            [sqrt(2) 0; 0 1],
+        )
+        (
+            (((0, 2, 1.0), (0, 0, 0.0)), (0, 2, 1.0), (false, false), ()),
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()),
+            [0 1.0],
+        )
+        (
+            (((1, 1, 0.5), (1, 1, 0.5)), (0, 2, 1.0), (false, false), ()),
+            (((0, 0, 1.0), (0, 2, 0.0)), (0, 2, 1.0), (false, false), ()),
+            [0; -1.0],
+        )
+        (
+            (((0, 2, 0.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()),
+            (((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()),
+            [0 1/sqrt(2)],
+        )
+        (
+            (((0, 2, 1.0), (1, 1, 0.5)), (1, 3, 0.5), (false, false), ()),
+            (((1, 1, 0.5), (0, 2, 0.0)), (1, 3, 0.5), (false, false), ()),
+            [0 sqrt(3/2)],
+        )
     ]
 
 
@@ -223,38 +369,38 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
 
         if vs_right == (0, 0, 0.0)
             # Flip sign to the second column (0,0,0)_2
-            ftree_array[:,2] = ftree_array[:,2] * -1
+            ftree_array[:, 2] = ftree_array[:, 2] * -1
         elseif vs_right == (0, 0, 1.0)
             # Flip sign to the first column (0,0,1)_1
-            ftree_array[:,1] *= -1
+            ftree_array[:, 1] *= -1
         elseif vs_right == (1, -1, 0.5)
             # Flip sign to the first column (1,-1,0.5)_1
-            ftree_array[:,1] *= -1
+            ftree_array[:, 1] *= -1
         elseif vs_right == (0, -2, 0.0)
             # Flip sign to the first column (0,-2,0)_1
-            ftree_array[:,1] *= -1
+            ftree_array[:, 1] *= -1
         elseif vs_right == (0, -2, 1.0)
             # Flip sign to the first column (0,-2,0)_1
-            ftree_array[:,1] *= -1
+            ftree_array[:, 1] *= -1
         end
 
-        
+
         vs_left = f1[1][1]
         if vs_left == (0, 0, 1.0)
             # Flip sign to the first row (0,0,1)_1 # Imposes anticommutivity in the (0,0,1)_1 virtual space, i.e. a particle and a hole with opposite signs.
-            ftree_array[1,:] *= -1
+            ftree_array[1, :] *= -1
         elseif vs_left == (0, 0, 0.0)
             # Flip sign to the second row (0,0,0)_1 # Imposes anticommutivity in the (0,0,0)_1 virtual space, i.e. a particle and a hole with equal signs.
-            ftree_array[2,:] *= -1
+            ftree_array[2, :] *= -1
         end
-        
-        
-        anOp[ftree_type(f1...), ftree_type(f2...)][:,1,:,1] = ftree_array
+
+
+        anOp[ftree_type(f1...), ftree_type(f2...)][:, 1, :, 1] = ftree_array
     end
 
     # IDENTITY OPERATOR
-    idOp = localIdOp(phySpace, auxVecSpace; dataType=dataType)
-    
+    idOp = localIdOp(phySpace, auxVecSpace; dataType = dataType)
+
     return LocalOps(crOp, anOp, idOp)
 end
 
@@ -275,37 +421,53 @@ struct U1U1SymmetryContext{qn_type} <: AbstractSymmetryContext
     qn_type::DataType
     is_spin_symm::Bool
     operators::AbstractLocalOps{Float64}
-    operator_data::Dict{String, Dict{Tuple{qn_type, Int}, Dict{Tuple{qn_type, Int}, Vector{FusionTreeDataType(qn_type)}}}}
-    local_ops_idx_map::Dict{String, Int}
-    idx_local_ops_map::Dict{Int, String}
-    vsQN_idx_map::Dict{Tuple{qn_type, Int}, Int}
-    idx_vsQN_map::Dict{Int, Tuple{qn_type, Int}}
+    operator_data::Dict{
+        String,
+        Dict{
+            Tuple{qn_type,Int},
+            Dict{Tuple{qn_type,Int},Vector{FusionTreeDataType(qn_type)}},
+        },
+    }
+    local_ops_idx_map::Dict{String,Int}
+    idx_local_ops_map::Dict{Int,String}
+    vsQN_idx_map::Dict{Tuple{qn_type,Int},Int}
+    idx_vsQN_map::Dict{Int,Tuple{qn_type,Int}}
     all_local_ops::Vector{String}
-    is_filled::Dict{String, Bool}
-    
-    function U1U1SymmetryContext(; fill_data::Bool=true)
-        throw(NotImplementedError("U1U1 symmetry context is a WIP and is not yet implemented."))
+    is_filled::Dict{String,Bool}
+
+    function U1U1SymmetryContext(; fill_data::Bool = true)
+        throw(
+            NotImplementedError(
+                "U1U1 symmetry context is a WIP and is not yet implemented.",
+            ),
+        )
         name = "U1U1"
-        qn_type = Tuple{Bool, Int, Int}
+        qn_type = Tuple{Bool,Int,Int}
         is_spin_symm = false
-        
+
         # Initialize operators
-        ops = get_cr_an_local_ops_U1U1(spin_symm=is_spin_symm)
-        
+        ops = get_cr_an_local_ops_U1U1(spin_symm = is_spin_symm)
+
         # Get all local operator strings
         all_local_ops = get_all_local_ops_str(name)
-        
+
         # Create local operators index mapping
         local_ops_idx_map = Dict(op => i for (i, op) in enumerate(all_local_ops))
         idx_local_ops_map = Dict(v => k for (k, v) in local_ops_idx_map)
 
         # Create virtual space index mapping
-        vsQN_idx_map = Dict{Any, Int}()  # Placeholder for now.
+        vsQN_idx_map = Dict{Any,Int}()  # Placeholder for now.
         idx_vsQN_map = Dict(v => k for (k, v) in vsQN_idx_map)
 
         # Initialize operator data dictionary
-        OpDataDict = Dict{String, Dict{Tuple{qn_type, Int}, Dict{Tuple{qn_type, Int}, Vector{FusionTreeDataType(qn_type)}}}}
-        
+        OpDataDict = Dict{
+            String,
+            Dict{
+                Tuple{qn_type,Int},
+                Dict{Tuple{qn_type,Int},Vector{FusionTreeDataType(qn_type)}},
+            },
+        }
+
         # Fill the operator data dictionary if requested
         if fill_data
             operator_data = OpDataDict()
@@ -318,13 +480,25 @@ struct U1U1SymmetryContext{qn_type} <: AbstractSymmetryContext
             operator_data = OpDataDict()
             is_filled = Dict(op => false for op in all_local_ops)
         end
-        
-        return new{qn_type}(name, qn_type, is_spin_symm, ops, operator_data, local_ops_idx_map, idx_local_ops_map, vsQN_idx_map, idx_vsQN_map, all_local_ops, is_filled)
+
+        return new{qn_type}(
+            name,
+            qn_type,
+            is_spin_symm,
+            ops,
+            operator_data,
+            local_ops_idx_map,
+            idx_local_ops_map,
+            vsQN_idx_map,
+            idx_vsQN_map,
+            all_local_ops,
+            is_filled,
+        )
     end
 end
 
 # Define the U1U1 local operators
-function get_cr_an_local_ops_U1U1(; dataType::DataType=Float64, spin_symm::Bool=false)
+function get_cr_an_local_ops_U1U1(; dataType::DataType = Float64, spin_symm::Bool = false)
     # Currently the U1U1 symmetry is not supported.
     """ Generate local operators for the Hamiltonian """
     # Creation and annilihation operator for spin-1/2 multiplet (spinUp and spinDown)
@@ -336,7 +510,7 @@ function get_cr_an_local_ops_U1U1(; dataType::DataType=Float64, spin_symm::Bool=
     # - The creation/annihilation operators are constructed by iterating over the fusion trees of the complete space (virt⊗phy ⊗ virt⊗phy) that increase/decrease the U1 total count by 1,
     #   then building a "one-hot" tensormap and converting it to its array representation. The fusiontree intersection value is defined by the coefficient that would result in a +1 value in the array representation
     #   for creating/annihilating a spinUp electron (from |∅> to |↑> or from |↑> to |∅>) in the physical space. This coefficient would be the inverse of the Glebsch Gordan coefficient for the fusion tree intersection.
-    
+
     # 13 virtual states:
     # 1:  (0, 0, 0)        |∅>
     # 2:  (0, 0, 1)        |↑>-|↓>
@@ -352,10 +526,22 @@ function get_cr_an_local_ops_U1U1(; dataType::DataType=Float64, spin_symm::Bool=
     # 12: (0, -2, 1)      -|↓↓>
     # 13: (0, -2, -1)     -|↑↑>
 
-    auxVecSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[U₁])]((0, 0, 0)=>1, (0, 0, 1)=>1, (0, 0, -1)=>1, (1, 1, 1/2)=>1, (1, 1, -1/2)=>1,
-                                                                (1, -1, 1/2)=>1, (0, 2, 0)=>1, (1, -1, -1/2)=>1, (0, -2, 0)=>1,
-                                                                (0, 2, 1)=>1, (0, 2, -1)=>1, (0, -2, 1)=>1, (0, -2, -1)=>1)
-    
+    auxVecSpace = Vect[(FermionParity⊠Irrep[U₁]⊠Irrep[U₁])](
+        (0, 0, 0)=>1,
+        (0, 0, 1)=>1,
+        (0, 0, -1)=>1,
+        (1, 1, 1/2)=>1,
+        (1, 1, -1/2)=>1,
+        (1, -1, 1/2)=>1,
+        (0, 2, 0)=>1,
+        (1, -1, -1/2)=>1,
+        (0, -2, 0)=>1,
+        (0, 2, 1)=>1,
+        (0, 2, -1)=>1,
+        (0, -2, 1)=>1,
+        (0, -2, -1)=>1,
+    )
+
     # Virtual states creation pairings
     # (Incoming, outgoing, factor).
     # With negative virtual factors
@@ -364,42 +550,84 @@ function get_cr_an_local_ops_U1U1(; dataType::DataType=Float64, spin_symm::Bool=
     # Positive and negative virtual spaces are perpendicular. E.g. -|↑>+|↓> = |↓>+-|↑> ; and -|↑>+|↓> ⟺ |↓> is positive
     # No fermionic anticommutation in the virtual space so |↑> (4) ⟺ |↑↓> (7) is positive
     # -|↓> (6) ⟺ -|↑↓> (9) is negative, -|↑> (8) ⟺ -|↑↓> (9) is also negative because there is no fermionic anticommutation
-    vCrUpPairings = [(1,4,1), (3,5,-1), (4,10,1), (5,7,1), (6,2,1), (8,1,-1), (9,6,-1), (13,8,-1)]
-    vCrDownPairings = [(1,5,1), (2,4,-1), (4,7,1), (5,11,1), (6,1,-1), (8,3,1), (9,8,-1), (12,6,-1)]
+    vCrUpPairings = [
+        (1, 4, 1),
+        (3, 5, -1),
+        (4, 10, 1),
+        (5, 7, 1),
+        (6, 2, 1),
+        (8, 1, -1),
+        (9, 6, -1),
+        (13, 8, -1),
+    ]
+    vCrDownPairings = [
+        (1, 5, 1),
+        (2, 4, -1),
+        (4, 7, 1),
+        (5, 11, 1),
+        (6, 1, -1),
+        (8, 3, 1),
+        (9, 8, -1),
+        (12, 6, -1),
+    ]
     # vCrDownPairings = [(1,5,1), (2,4,1), (4,7,1), (5,11,1), (6,1,1), (8,3,1), (9,8,-1), (12,6,-1)]
-    vAnUpPairings = [(1,8,-1), (2,6,1), (4,1,1), (5,3,-1), (6,9,-1), (7,5,1), (8,13,-1), (10,4,1)]
-    vAnDownPairings = [(1,6,-1), (3,8,1), (4,2,-1), (5,1,1), (6,12,-1), (7,4,1), (8,9,-1), (11,5,1)]
+    vAnUpPairings = [
+        (1, 8, -1),
+        (2, 6, 1),
+        (4, 1, 1),
+        (5, 3, -1),
+        (6, 9, -1),
+        (7, 5, 1),
+        (8, 13, -1),
+        (10, 4, 1),
+    ]
+    vAnDownPairings = [
+        (1, 6, -1),
+        (3, 8, 1),
+        (4, 2, -1),
+        (5, 1, 1),
+        (6, 12, -1),
+        (7, 4, 1),
+        (8, 9, -1),
+        (11, 5, 1),
+    ]
     # vAnDownPairings = [(1,6,1), (3,8,1), (4,2,1), (5,1,1), (6,12,-1), (7,4,1), (8,9,-1), (11,5,1)]
 
     # Physical creation pairings
-    pCrUpPairings = [(1,2,1), (3,4,1)]
-    pCrDownPairings = [(1,3,1), (2,4,-1)]
-    pAnUpPairings = [(2,1,1), (4,3,1)]
-    pAnDownPairings = [(3,1,1), (4,2,-1)]
+    pCrUpPairings = [(1, 2, 1), (3, 4, 1)]
+    pCrDownPairings = [(1, 3, 1), (2, 4, -1)]
+    pAnUpPairings = [(2, 1, 1), (4, 3, 1)]
+    pAnDownPairings = [(3, 1, 1), (4, 2, -1)]
 
     # Creation operator    
     crUpMat = zeros(dataType, TensorKit.dim(auxVecSpace), 4, TensorKit.dim(auxVecSpace), 4)
-    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in Iterators.product(vAnUpPairings, pCrUpPairings)
+    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in
+        Iterators.product(vAnUpPairings, pCrUpPairings)
         crUpMat[vOut, pOut, vIn, pIn] = vFactor * pFactor
     end
-    crDownMat = zeros(dataType, TensorKit.dim(auxVecSpace), 4, TensorKit.dim(auxVecSpace), 4)
-    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in Iterators.product(vAnDownPairings, pCrDownPairings)
+    crDownMat =
+        zeros(dataType, TensorKit.dim(auxVecSpace), 4, TensorKit.dim(auxVecSpace), 4)
+    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in
+        Iterators.product(vAnDownPairings, pCrDownPairings)
         crDownMat[vOut, pOut, vIn, pIn] = vFactor * pFactor
     end
 
     # Annihilation operator
     anUpMat = zeros(dataType, TensorKit.dim(auxVecSpace), 4, TensorKit.dim(auxVecSpace), 4)
-    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in Iterators.product(vCrUpPairings, pAnUpPairings)
+    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in
+        Iterators.product(vCrUpPairings, pAnUpPairings)
         anUpMat[vOut, pOut, vIn, pIn] = vFactor * pFactor
     end
-    anDownMat = zeros(dataType, TensorKit.dim(auxVecSpace), 4, TensorKit.dim(auxVecSpace), 4)
-    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in Iterators.product(vCrDownPairings, pAnDownPairings)
+    anDownMat =
+        zeros(dataType, TensorKit.dim(auxVecSpace), 4, TensorKit.dim(auxVecSpace), 4)
+    for ((vIn, vOut, vFactor), (pIn, pOut, pFactor)) in
+        Iterators.product(vCrDownPairings, pAnDownPairings)
         anDownMat[vOut, pOut, vIn, pIn] = vFactor * pFactor
     end
 
     phySpace = genPhySpace("U1U1")
 
-    idOp = localIdOp(phySpace, auxVecSpace; dataType=dataType)
+    idOp = localIdOp(phySpace, auxVecSpace; dataType = dataType)
     if spin_symm
         # Symmetric operators
         crMat = crUpMat + crDownMat
@@ -415,7 +643,7 @@ function get_cr_an_local_ops_U1U1(; dataType::DataType=Float64, spin_symm::Bool=
 
         local_ops = LocalOps(crUpOp, crDownOp, anUpOp, anDownOp, idOp)
     end
-    
+
     return local_ops
 end
 
@@ -438,13 +666,17 @@ Factory function to create the appropriate symmetry context based on the symmetr
 """
 function create_symmetry_context(symmetry_name::String; kwargs...)
     symmetry_name = validate_symmetry(symmetry_name)
-    
+
     if symmetry_name == "U1SU2"
         return U1SU2SymmetryContext(; kwargs...)
     elseif symmetry_name == "U1U1"
         return U1U1SymmetryContext(; kwargs...)
     else
-        throw(ArgumentError("Unsupported symmetry: $symmetry_name. Supported symmetries are: 'U1SU2', 'U1U1'."))
+        throw(
+            ArgumentError(
+                "Unsupported symmetry: $symmetry_name. Supported symmetries are: 'U1SU2', 'U1U1'.",
+            ),
+        )
     end
 end
 
@@ -454,19 +686,32 @@ function validate_symmetry(symm)
     elseif uppercase(symm) == "U1SU2"
         return "U1SU2"
     else
-        throw(ArgumentError("Unsupported symmetry type: $symm. Supported types are 'U1U1' and 'U1SU2'."))
+        throw(
+            ArgumentError(
+                "Unsupported symmetry type: $symm. Supported types are 'U1U1' and 'U1SU2'.",
+            ),
+        )
     end
 end
 
-function Base.getindex(symm_ctx::AbstractSymmetryContext, input::Tuple{String, QN, Int, QN, Int}) where QN
+function Base.getindex(
+    symm_ctx::AbstractSymmetryContext,
+    input::Tuple{String,QN,Int,QN,Int},
+) where {QN}
     op_str, vs_left, vs_left_mult, vs_right, vs_right_mult = input
 
     if haskey(symm_ctx.operator_data, op_str)
         if haskey(symm_ctx.operator_data[op_str], (vs_left, vs_left_mult))
-            if haskey(symm_ctx.operator_data[op_str][(vs_left, vs_left_mult)], (vs_right, vs_right_mult))
-                
-                return symm_ctx.operator_data[op_str][(vs_left, vs_left_mult)][(vs_right, vs_right_mult)]
-                
+            if haskey(
+                symm_ctx.operator_data[op_str][(vs_left, vs_left_mult)],
+                (vs_right, vs_right_mult),
+            )
+
+                return symm_ctx.operator_data[op_str][(vs_left, vs_left_mult)][(
+                    vs_right,
+                    vs_right_mult,
+                )]
+
             else
                 @warn "No data found for operator $op_str with left virtual space $vs_left and multiplicity $vs_left_mult in the dictionary for right virtual space $vs_right and multiplicity $vs_right_mult."
                 return [] # Return an empty vector if the data not found
@@ -476,54 +721,63 @@ function Base.getindex(symm_ctx::AbstractSymmetryContext, input::Tuple{String, Q
             return [] # Return an empty vector if the data not found
         end
     else
-        
+
         op_data = get_op_data(symm_ctx.operators, op_str, QN)
 
-        if !haskey(op_data[op_str], (vs_left, vs_left_mult)) || !haskey(op_data[op_str][(vs_left, vs_left_mult)], (vs_right, vs_right_mult))
+        if !haskey(op_data[op_str], (vs_left, vs_left_mult)) ||
+           !haskey(op_data[op_str][(vs_left, vs_left_mult)], (vs_right, vs_right_mult))
             @warn "No data found for operator $op_str with left virtual space $vs_left and multiplicity $vs_left_mult in the dictionary for right virtual space $vs_right and multiplicity $vs_right_mult."
         end
         symm_ctx.operator_data[op_str] = op_data
         symm_ctx.is_filled[op_str] = true
 
-        return symm_ctx.operator_data[op_str][(vs_left, vs_left_mult)][(vs_right, vs_right_mult)]
+        return symm_ctx.operator_data[op_str][(vs_left, vs_left_mult)][(
+            vs_right,
+            vs_right_mult,
+        )]
     end
 end
 
 
-function get_op_data(ops::AbstractLocalOps, op_str::String, ::Type{QN}) where QN
+function get_op_data(ops::AbstractLocalOps, op_str::String, ::Type{QN}) where {QN}
     op_TM = construct_op_TensorMap(ops, op_str) # note QN is not inferred as `sectortype(op_TM)` because we don't want any dependency on TensorKit and define the virtual spaces types ourselves
-    
+
     # Use DefaultDict to eliminate haskey checks
-    op_data = DefaultDict{Tuple{QN, Int}, DefaultDict{Tuple{QN, Int}, Vector{FusionTreeDataType(QN)}}}(
-        () -> DefaultDict{Tuple{QN, Int}, Vector{FusionTreeDataType(QN)}}(
-            () -> Vector{FusionTreeDataType(QN)}()
+    op_data =
+        DefaultDict{Tuple{QN,Int},DefaultDict{Tuple{QN,Int},Vector{FusionTreeDataType(QN)}}}(
+            () -> DefaultDict{Tuple{QN,Int},Vector{FusionTreeDataType(QN)}}(
+                () -> Vector{FusionTreeDataType(QN)}(),
+            ),
         )
-    )
-    
+
     for (f1, f2) in fusiontrees(op_TM)
-        val = Matrix(op_TM[f1,f2][:,1,:,1])
+        val = Matrix(op_TM[f1, f2][:, 1, :, 1])
         if !iszero(val)
             vs_left, ftree_left = ftree_data(f1)
             vs_right, ftree_right = ftree_data(f2)
 
 
-            for (vs_left_mult, vs_right_mult, nzval) in zip(findnz(SparseArrays.sparse(val))...)
-                push!(op_data[(vs_left, vs_left_mult)][(vs_right, vs_right_mult)], (ftree_left, ftree_right, nzval))
+            for (vs_left_mult, vs_right_mult, nzval) in
+                zip(findnz(SparseArrays.sparse(val))...)
+                push!(
+                    op_data[(vs_left, vs_left_mult)][(vs_right, vs_right_mult)],
+                    (ftree_left, ftree_right, nzval),
+                )
             end
         end
     end
-    
+
     return op_data
 end
 
 function construct_op_TensorMap(ops::AbstractLocalOps, op_str::String)
     """
     Construct a TensorMap for a given operator string using the symmetry context.
-    
+
     Parameters:
     - ops: AbstractLocalOps containing the operator definitions
     - op_str: String representing the operator
-    
+
     Returns:
     - TensorMap representing the operator
     """
@@ -531,9 +785,12 @@ function construct_op_TensorMap(ops::AbstractLocalOps, op_str::String)
         # Identity operator
         op_TM = ops["I"]
     else
-        op_TM = reduce(*, [ops[join(collect(op_str)[i:i+1])] for i in reverse(1:2:length(op_str))])
+        op_TM = reduce(
+            *,
+            [ops[join(collect(op_str)[i:(i+1)])] for i in reverse(1:2:length(op_str))],
+        )
     end
-    
+
     return op_TM
 end
 
@@ -551,7 +808,11 @@ function get_all_local_ops_str(symm::String)
         all_local_ops_str = get_all_local_ops_str(["a1", "a2", "c2", "c1"])
     else
         # For non symmetric operator sums, one may have to take the union of the restuls from ["a↑", "a↑", "c↑", "c↑"], ["a↓", "a↓", "c↓", "c↓"], ["a↑", "a↓", "c↓", "c↑"] and ["a↓", "a↑", "c↑", "c↓"].
-        throw(ArgumentError("Unsupported symmetry: $symm. Supported symmetries are: 'U1SU2'."))
+        throw(
+            ArgumentError(
+                "Unsupported symmetry: $symm. Supported symmetries are: 'U1SU2'.",
+            ),
+        )
     end
     return all_local_ops_str
 end
@@ -572,7 +833,7 @@ function get_all_local_ops_str(max_op_str_vector::Vector{String})
     """
     all_local_ops_str = ["I"]
     n = length(max_op_str_vector)
-    for i in 1:n
+    for i = 1:n
         for c in combinations(max_op_str_vector, i)
             op_str = join(c)
             push!(all_local_ops_str, op_str)
@@ -599,14 +860,27 @@ Generate the physical space based on the given symmetry type `symm`.
 """
 function genPhySpace(symm)
     # FermionParity must always be imposed
-    
+
     if uppercase(symm) == "U1U1"
         # (fParity, total count, spin count)
-        phySpace = Vect[(FermionParity ⊠ U1Irrep ⊠ U1Irrep)]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (1, 1, -1 // 2) => 1, (0, 2, 0) => 1)
+        phySpace = Vect[(FermionParity⊠U1Irrep⊠U1Irrep)](
+            (0, 0, 0) => 1,
+            (1, 1, 1 // 2) => 1,
+            (1, 1, -1 // 2) => 1,
+            (0, 2, 0) => 1,
+        )
     elseif uppercase(symm) == "U1SU2"
-        phySpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])]((0, 0, 0) => 1, (1, 1, 1 // 2) => 1, (0, 2, 0) => 1)
+        phySpace = Vect[(FermionParity⊠Irrep[U₁]⊠Irrep[SU₂])](
+            (0, 0, 0) => 1,
+            (1, 1, 1 // 2) => 1,
+            (0, 2, 0) => 1,
+        )
     else
-        throw(ArgumentError("The specified symmetry type '$symm' is not implemented. The current options are: 'U1', 'U1U1', and 'U1SU2'"))
+        throw(
+            ArgumentError(
+                "The specified symmetry type '$symm' is not implemented. The current options are: 'U1', 'U1U1', and 'U1SU2'",
+            ),
+        )
     end
 
     return phySpace
@@ -614,15 +888,15 @@ function genPhySpace(symm)
 end
 
 # General identity operator
-function localIdOp(phySpace, auxVecSpace; dataType::DataType=Float64)
+function localIdOp(phySpace, auxVecSpace; dataType::DataType = Float64)
     """ Construct local spatial orbital identity operator """
 
     dim_vSpace = TensorKit.dim(auxVecSpace)
     opData = zeros(dataType, dim_vSpace, 4, dim_vSpace, 4)
-    for i in 1:dim_vSpace
+    for i = 1:dim_vSpace
         opData[i, :, i, :] = diagm(ones(dataType, 4))
     end
-    
+
     idOp = TensorMap(opData, auxVecSpace ⊗ phySpace, auxVecSpace ⊗ phySpace)
     return idOp
 end
@@ -653,37 +927,42 @@ end
         FusionTree data
     )
 """
-ftree_data(f) = (ftree_inner_data(f.uncoupled[1]), (ftree_inner_data.(f.uncoupled), ftree_inner_data(f.coupled), (false, false), ()))
+ftree_data(f) = (
+    ftree_inner_data(f.uncoupled[1]),
+    (ftree_inner_data.(f.uncoupled), ftree_inner_data(f.coupled), (false, false), ()),
+)
 
 struct LocalOps{T} <: AbstractLocalOps{T}
-    ops::Dict{String, TensorMap{T}}
-    aliases::Dict{String, String}
+    ops::Dict{String,TensorMap{T}}
+    aliases::Dict{String,String}
 
     # For the symmetric constructor
-    function LocalOps(c::TensorMap{T}, a::TensorMap{T}, I::TensorMap{T}) where T
+    function LocalOps(c::TensorMap{T}, a::TensorMap{T}, I::TensorMap{T}) where {T}
         ops = Dict("c" => c, "a" => a, "I" => I)
-        aliases = Dict{String, String}()
+        aliases = Dict{String,String}()
         return new{T}(ops, aliases)
     end
 
     # For the non-symmetric constructor
-    function LocalOps(cu::TensorMap{T}, cd::TensorMap{T}, au::TensorMap{T}, ad::TensorMap{T}, I::TensorMap{T}) where T
-        ops = Dict{String, TensorMap{T}}(
+    function LocalOps(
+        cu::TensorMap{T},
+        cd::TensorMap{T},
+        au::TensorMap{T},
+        ad::TensorMap{T},
+        I::TensorMap{T},
+    ) where {T}
+        ops = Dict{String,TensorMap{T}}(
             "cu" => cu,
             "cd" => cd,
             "au" => au,
             "ad" => ad,
-            "I" => I
+            "I" => I,
         )
-        aliases = Dict{String, String}(
-            "c↑" => "cu",
-            "c↓" => "cd", 
-            "a↑" => "au",
-            "a↓" => "ad"
-        )
+        aliases =
+            Dict{String,String}("c↑" => "cu", "c↓" => "cd", "a↑" => "au", "a↓" => "ad")
         return new{T}(ops, aliases)
     end
-    
+
 end
 
 function Base.getindex(lo::LocalOps, key::String)
@@ -693,8 +972,12 @@ function Base.getindex(lo::LocalOps, key::String)
     elseif haskey(lo.aliases, key)
         return lo.ops[lo.aliases[key]]
     else
-        available_keys = [collect(keys(lo.ops)); collect(keys(lo.aliases))] 
-        throw(KeyError("LocalOps does not contain key '$key'. Available keys are: $(sort(available_keys))"))
+        available_keys = [collect(keys(lo.ops)); collect(keys(lo.aliases))]
+        throw(
+            KeyError(
+                "LocalOps does not contain key '$key'. Available keys are: $(sort(available_keys))",
+            ),
+        )
     end
 end
 
@@ -705,7 +988,7 @@ Base.keys(lo::LocalOps) = [collect(keys(lo.ops)); collect(keys(lo.aliases))]
 struct LocalOps_SpinSymm{T} <: AbstractLocalOps{T}
     base_ops::LocalOps{T}
 
-    LocalOps_SpinSymm(base_ops::LocalOps{T}) where T = new{T}(base_ops)
+    LocalOps_SpinSymm(base_ops::LocalOps{T}) where {T} = new{T}(base_ops)
 end
 
 
@@ -727,26 +1010,26 @@ function Base.getindex(lo2V::LocalOps_SpinSymm, key::String)
         #    - Add a negative sign to the second multiplicity of the (0,0,0) sector, which represents a particle and a hole with the same spin for the two virtual IDs.
         #    - Add a negative sign to the (0,+-2,1) sector to anticommute its two possible constructions from virtual particles with different IDs but with the same spin.
         for (f1, f2) in fusiontrees(c)
-            ftree_array = c[f1,f2]
+            ftree_array = c[f1, f2]
             if !iszero(ftree_array)
                 vs_left = ftree_data(f1)[1]
                 if iszero(vs_left[1])
                     # Swap columns (domain)
-                    c[f1,f2][:,1,:,1] = ftree_array[:,1,[2,1],1]
+                    c[f1, f2][:, 1, :, 1] = ftree_array[:, 1, [2, 1], 1]
 
                     if vs_left == (0, -2, 1.0)
                         # Flip sign to the first row (0,-2,1)_1
-                        c[f1,f2][1,1,:,1] *= -1
+                        c[f1, f2][1, 1, :, 1] *= -1
                     end
                 else
                     # Swap rows (codomain)
-                    c[f1,f2][:,1,:,1] = ftree_array[[2,1],1,:,1]
-                    
+                    c[f1, f2][:, 1, :, 1] = ftree_array[[2, 1], 1, :, 1]
+
                     vs_right = ftree_data(f2)[1]
 
                     if vs_right == (0, 2, 1.0)
                         # Flip sign to the first column (0,2,1)_1
-                        c[f1,f2][:,1,1,1] *= -1
+                        c[f1, f2][:, 1, 1, 1] *= -1
                     end
                 end
             end
@@ -759,33 +1042,37 @@ function Base.getindex(lo2V::LocalOps_SpinSymm, key::String)
         a = copy(lo2V.base_ops["a"])
 
         for (f1, f2) in fusiontrees(a)
-            ftree_array = a[f1,f2]
+            ftree_array = a[f1, f2]
             if !iszero(ftree_array)
                 vs_left = ftree_data(f1)[1]
                 if iszero(vs_left[1])
                     # Swap columns (domain)
-                    a[f1,f2][:,1,:,1] = ftree_array[:,1,[2,1],1]
+                    a[f1, f2][:, 1, :, 1] = ftree_array[:, 1, [2, 1], 1]
 
                     if vs_left == (0, 2, 1.0)
                         # Flip sign to the first row (0,2,1)_1
-                        a[f1,f2][1,1,:,1] *= -1
+                        a[f1, f2][1, 1, :, 1] *= -1
                     end
                 else
                     # Swap rows (codomain)
-                    a[f1,f2][:,1,:,1] = ftree_array[[2,1],1,:,1]
-                    
+                    a[f1, f2][:, 1, :, 1] = ftree_array[[2, 1], 1, :, 1]
+
                     vs_right = ftree_data(f2)[1]
 
                     if vs_right == (0, -2, 1.0)
                         # Flip sign to the first column (0,-2,1)_1
-                        a[f1,f2][:,1,1,1] *= -1
+                        a[f1, f2][:, 1, 1, 1] *= -1
                     end
                 end
             end
         end
         return a
     else
-        throw(ArgumentError("Unsupported operator key: $key. Supported keys are: 'I', 'c1', 'c2', 'a1', 'a2'."))
+        throw(
+            ArgumentError(
+                "Unsupported operator key: $key. Supported keys are: 'I', 'c1', 'c2', 'a1', 'a2'.",
+            ),
+        )
     end
 end
 

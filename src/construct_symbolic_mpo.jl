@@ -65,109 +65,171 @@ The local mpo is the transformation matrix between 0'',1'' to 0'''
 Source: https://github.com/shuaigroup/Renormalizer/blob/master/renormalizer/mps/symbolic_mpo.py
 """
 
-function construct_symbolic_mpo(table, factors, symm_ctx::AbstractSymmetryContext; algo="Hungarian", verbose=false)
-    
+function construct_symbolic_mpo(
+    table,
+    factors,
+    symm_ctx::AbstractSymmetryContext;
+    algo = "Hungarian",
+    verbose = false,
+)
+
     n_sites = size(table, 2)
-    
+
     # Start with the trivial virtual space. It is imposed on the symmetry related symm_ctx.idx_vsQN_map to have the trivial_space mapped to the index 1.
     # Add ones at the beginning and end of each row. They will be the index of the trivial auxiliary virtual bonds at the start and end of the MPO
     ones_col = ones(Int, size(table, 1))
     table = hcat(ones_col, table, ones_col)
-    virtSpace_left = [1] 
-    site_entries_list = Vector{Vector{Tuple{Int, Int, Int, Float64}}}(undef, n_sites)
+    virtSpace_left = [1]
+    site_entries_list = Vector{Vector{Tuple{Int,Int,Int,Float64}}}(undef, n_sites)
 
     # Store the list of virtual spaces at each site
     virtSpaces_list = Vector{Vector{Int}}()
     push!(virtSpaces_list, virtSpace_left)
 
     verbose && println("Using $(algo) algorithm for bipartite matching optimization")
-    
-    for isite in 1:n_sites
+
+    for isite = 1:n_sites
         verbose && println("Processing site $(isite) of $(n_sites)")
         # Split table into row and column parts - where rows are the first two columns (incoming virtual space and site operator); and the rest for columns are the rest of the site operators (with the trivial virtual space as last)
         table_row = table[:, 1:2]
         table_col = table[:, 3:end]
-        
+
         # Call the one_site function to process this site
         site_entries, virtSpace_right, table, factors = _construct_symbolic_mpo_one_site(
-            table_row, table_col, virtSpace_left, factors, symm_ctx; algo=algo
+            table_row,
+            table_col,
+            virtSpace_left,
+            factors,
+            symm_ctx;
+            algo = algo,
         )
-        
+
         # Update for next iteration
         virtSpace_left = virtSpace_right
-        
+
         # Store the virtual spaces for this site
         push!(virtSpaces_list, virtSpace_right)
 
         site_entries_list[isite] = site_entries
     end
-    
+
     # At the end, we should have a single term with factor 1 (or close to it due to floating point)
     # Comment out assert for now during development
-    @assert size(table, 1) == length(factors) == 1 && isapprox(factors[1], 1.0, atol=1e-10)
+    @assert size(table, 1) == length(factors) == 1 &&
+            isapprox(factors[1], 1.0, atol = 1e-10)
     @assert length(virtSpaces_list) == n_sites + 1
 
     # Construct symbolic MPO
     symbolic_mpo = [] # Preallocate if possible
-    for isite in 1:n_sites
-        symbolic_site = compose_symbolic_site_sparse(site_entries_list[isite], virtSpaces_list[isite], virtSpaces_list[isite+1], symm_ctx.idx_local_ops_map)
+    for isite = 1:n_sites
+        symbolic_site = compose_symbolic_site_sparse(
+            site_entries_list[isite],
+            virtSpaces_list[isite],
+            virtSpaces_list[isite+1],
+            symm_ctx.idx_local_ops_map,
+        )
         push!(symbolic_mpo, symbolic_site)
     end
 
     # Calculate the virtual spaces' quantum numbers
-    QNType = Tuple{Bool, Int, Rational{Int}} # Fix later to be defined by the symm obj
+    QNType = Tuple{Bool,Int,Rational{Int}} # Fix later to be defined by the symm obj
 
-    mpoVs = Vector{Vector{Tuple{QNType, Int}}}(undef, length(virtSpaces_list))
+    mpoVs = Vector{Vector{Tuple{QNType,Int}}}(undef, length(virtSpaces_list))
     for (i, virtSpace_out) in enumerate(virtSpaces_list)
         mpoVs[i] = [symm_ctx.idx_vsQN_map[vs_grp] for vs_grp in virtSpace_out]
     end
 
     verbose && println("symbolic MPO's bond dimensions: $([length(vs) for vs in mpoVs])")
-    
+
     return symbolic_mpo, mpoVs
 end
 
-function construct_symbolic_mpo(op_terms::ChemOpSum, symm_ctx::AbstractSymmetryContext; kwargs...)
+function construct_symbolic_mpo(
+    op_terms::ChemOpSum,
+    symm_ctx::AbstractSymmetryContext;
+    kwargs...,
+)
     table, factors = terms_to_table(op_terms, symm_ctx)
     return construct_symbolic_mpo(table, factors, symm_ctx; kwargs...)
 end
 
 
-construct_symbolic_mpo(molecule::Molecule; kwargs...) = construct_symbolic_mpo(xyz_string(Molecule(molecule)); kwargs...)
+construct_symbolic_mpo(molecule::Molecule; kwargs...) =
+    construct_symbolic_mpo(xyz_string(Molecule(molecule)); kwargs...)
 function construct_symbolic_mpo(mol_str::String; kwargs...)
     h1e, h2e, nuc_e, hf_orb_occ_basis, hf_elec_occ, hf_energy = molecular_hf_data(mol_str)
     return construct_symbolic_mpo(h1e, h2e, nuc_e; kwargs...)
 end
-construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}, nuc_e::Float64; kwargs...) = construct_symbolic_mpo(h1e, h2e; nuc_e=nuc_e, kwargs...)
+construct_symbolic_mpo(
+    h1e::AbstractArray{Float64},
+    h2e::AbstractArray{Float64},
+    nuc_e::Float64;
+    kwargs...,
+) = construct_symbolic_mpo(h1e, h2e; nuc_e = nuc_e, kwargs...)
 
-function construct_symbolic_mpo(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64}; nuc_e::Float64=0.0, symm::String="U1SU2", ord=nothing, ops_tol=1e-14, algo="Hungarian", spin_symm::Bool=true, verbose=false)
-    
+function construct_symbolic_mpo(
+    h1e::AbstractArray{Float64},
+    h2e::AbstractArray{Float64};
+    nuc_e::Float64 = 0.0,
+    symm::String = "U1SU2",
+    ord = nothing,
+    ops_tol = 1e-14,
+    algo = "Hungarian",
+    spin_symm::Bool = true,
+    verbose = false,
+)
+
     symm_ctx = create_symmetry_context(symm)
 
-    op_terms = gen_ChemOpSum(h1e, h2e; nuc_e=nuc_e, n_sites=0, ord=ord, tol=ops_tol, spin_symm=spin_symm)
+    op_terms = gen_ChemOpSum(
+        h1e,
+        h2e;
+        nuc_e = nuc_e,
+        n_sites = 0,
+        ord = ord,
+        tol = ops_tol,
+        spin_symm = spin_symm,
+    )
 
     table, factors = terms_to_table(op_terms, symm_ctx)
-    symbolic_mpo, virt_spaces = construct_symbolic_mpo(table, factors, symm_ctx; algo=algo, verbose=verbose)
-    
+    symbolic_mpo, virt_spaces =
+        construct_symbolic_mpo(table, factors, symm_ctx; algo = algo, verbose = verbose)
+
     return symbolic_mpo, virt_spaces
 end
 
 
-function _construct_symbolic_mpo_one_site(table_row, table_col, virtSpace_left, factors, symm_ctx; algo="Hungarian")
+function _construct_symbolic_mpo_one_site(
+    table_row,
+    table_col,
+    virtSpace_left,
+    factors,
+    symm_ctx;
+    algo = "Hungarian",
+)
     # Find unique rows and their inverse mapping
     term_row, row_unique_inverseMap = find_unique_with_inverseMap(table_row)
-    
+
     # Make sure the dimensions match
     @assert size(table_row, 2) == 2
-    
+
     # Find unique columns and their inverse mapping
     term_col, col_unique_inverseMap = find_unique_with_inverseMap(table_col)
-    
+
     # Create a sparse matrix directly where non-zero values are indices into the factor array
-    non_red = SparseArrays.sparse(row_unique_inverseMap, col_unique_inverseMap, 1:length(factors))
-    
-    site_entries, virtSpaces_out, table, new_factor = _decompose_graph(term_row, term_col, non_red, virtSpace_left, factors, symm_ctx, algo)
-    
+    non_red =
+        SparseArrays.sparse(row_unique_inverseMap, col_unique_inverseMap, 1:length(factors))
+
+    site_entries, virtSpaces_out, table, new_factor = _decompose_graph(
+        term_row,
+        term_col,
+        non_red,
+        virtSpace_left,
+        factors,
+        symm_ctx,
+        algo,
+    )
+
     return site_entries, virtSpaces_out, table, new_factor
 end
 
@@ -195,11 +257,19 @@ Returns:
 Note: The Hungarian algorithm tends to produce more optimal MPO bond dimensions
       for quantum chemistry Hamiltonians, while "Hopcroft-Karp" is more time efficient.
 """
-function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, factors, symm_ctx, algo)
-    
+function _decompose_graph(
+    term_row,
+    term_col,
+    non_red,
+    virtSpace_left_arr,
+    factors,
+    symm_ctx,
+    algo,
+)
+
     # Get dimensions directly from the sparse matrix
     n_rows, n_cols = size(non_red)
-    
+
     # Use transpose to convert to CSC format and exploit efficient row access
     # TODO: Consider defining it directly in CSR format here by merging the two functions and having access to the inverseMaps.
     #       This allocates new data, so it might be better to calculate this in the caller function.
@@ -209,17 +279,17 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
 
     # More efficient way to build the bigraph based on matrix dimensions
     if n_rows < n_cols
-        
+
         # Note rows (columns) are columns (rows) in the original matrix
-        bigraph = [sparse_rows_T[nzrange(non_red_T, row)] for row in 1:n_rows]
-        
+        bigraph = [sparse_rows_T[nzrange(non_red_T, row)] for row = 1:n_rows]
+
         # Compute vertex cover using the specified algorithm
         rowbool, colbool = compute_bipartite_vertex_cover(bigraph, algo)
     else
 
         sparse_rows = rowvals(non_red)
-        bigraph = [sparse_rows[nzrange(non_red, row)] for row in 1:n_cols]
-        
+        bigraph = [sparse_rows[nzrange(non_red, row)] for row = 1:n_cols]
+
         colbool, rowbool = compute_bipartite_vertex_cover(bigraph, algo)
     end
 
@@ -227,16 +297,16 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
     row_select = findall(rowbool)
     # Sort row_select by how many columns each row covers, largest cover first
     # This helps optimize the MPO bond dimension
-    sort!(row_select, by=row -> -length(nzrange(non_red_T, row)))
+    sort!(row_select, by = row -> -length(nzrange(non_red_T, row)))
 
     col_select = findall(colbool)
-    
+
 
     # Initialize output virtual spaces, tables, and factors
     virtSpaces_right_arr = []
     new_table = []
     new_factor = []
-    site_entries = Vector{Tuple{Int, Int, Int, Float64}}() # Store site entries as (vs_left_idx, vs_right_idx, site_op_str_idx, factor)
+    site_entries = Vector{Tuple{Int,Int,Int,Float64}}() # Store site entries as (vs_left_idx, vs_right_idx, site_op_str_idx, factor)
 
     # Process selected rows first for better performance
     for row_idx in row_select
@@ -246,11 +316,14 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
         # Get the list of possible right virtual spaces for this left index and site operator
         vs_left_tup = symm_ctx.idx_vsQN_map[virtSpace_left_arr[vs_left_idx]]
         op_str = symm_ctx.idx_local_ops_map[site_op_idx]
-        vs_right_list = [symm_ctx.vsQN_idx_map[vs] for vs in keys(symm_ctx.operator_data[op_str][vs_left_tup])]
-        
+        vs_right_list = [
+            symm_ctx.vsQN_idx_map[vs] for
+            vs in keys(symm_ctx.operator_data[op_str][vs_left_tup])
+        ]
+
         # Since we transposed the sparse matrix, we get the columns as rows.
         matched_cols_range = nzrange(non_red_T, row_idx)
-        
+
         # table_entry_n_matched_cols = length(matched_cols_range)
         table_entry_n_cols = length(term_col[1]) + 1
 
@@ -260,25 +333,30 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
             # Get the operator string for the next site (the first operator in the column)
             op_str = symm_ctx.idx_local_ops_map[term_col[sparse_rows_T[matched_col_idx]][1]]
             # Get the allowed virtual spaces (to the left of the next operator)
-            allowed_vs_right_list[i] = [symm_ctx.vsQN_idx_map[vs] for vs in keys(symm_ctx.operator_data[op_str])]
+            allowed_vs_right_list[i] =
+                [symm_ctx.vsQN_idx_map[vs] for vs in keys(symm_ctx.operator_data[op_str])]
         end
 
         for virtSpace_right in vs_right_list
 
-            allowed_matched_idxs = findall(vs_allowed_by_col -> virtSpace_right in vs_allowed_by_col, allowed_vs_right_list)
+            allowed_matched_idxs = findall(
+                vs_allowed_by_col -> virtSpace_right in vs_allowed_by_col,
+                allowed_vs_right_list,
+            )
             if isempty(allowed_matched_idxs)
                 continue # Skip this right virtual space if it is not allowed by any column
             end
-            
-            allowed_matched_col_idxs = sparse_rows_T[matched_cols_range[allowed_matched_idxs]]
+
+            allowed_matched_col_idxs =
+                sparse_rows_T[matched_cols_range[allowed_matched_idxs]]
             table_entry_n_matched_cols = length(allowed_matched_col_idxs)
-            
+
             push!(virtSpaces_right_arr, virtSpace_right)
             vs_right_idx = length(virtSpaces_right_arr)
-            
+
             entry = (vs_left_idx, vs_right_idx, site_op_idx, 1.0)
             push!(site_entries, entry)
-    
+
             table_entry = Matrix{Int}(undef, table_entry_n_matched_cols, table_entry_n_cols)
             for (i, col_idx) in enumerate(allowed_matched_col_idxs)
                 table_entry[i, 1] = vs_right_idx
@@ -286,27 +364,30 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
             end
 
             push!(new_table, table_entry)
-            append!(new_factor, factors[sparse_vals_T[matched_cols_range[allowed_matched_idxs]]])
+            append!(
+                new_factor,
+                factors[sparse_vals_T[matched_cols_range[allowed_matched_idxs]]],
+            )
 
         end
 
         sparse_vals_T[matched_cols_range] .= 0
-                
+
     end
 
-    
+
     SparseArrays.dropzeros!(non_red_T)
     non_red = SparseArrays.sparse(non_red_T')
-    
+
     # Process selected columns
     for col_idx in col_select
         # Create a multi-operator entry for this column
-        
+
         next_op_str = symm_ctx.idx_local_ops_map[term_col[col_idx][1]]
         allowed_vs_right = keys(symm_ctx.operator_data[next_op_str])
 
-        vs_right_idx_dict = Dict{Int, Int}()
-        
+        vs_right_idx_dict = Dict{Int,Int}()
+
         for (row_idx, val) in zip(findnz(non_red[:, col_idx])...)
             vs_left_idx, site_op_idx = term_row[row_idx]
 
@@ -315,13 +396,17 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
 
             op_data = symm_ctx.operator_data[op_str]
             if !haskey(op_data, vs_left_tup)
-                error("Operator $op_str does not have a mapping for virtual space $vs_left_tup. val= $(factors[val])")
+                error(
+                    "Operator $op_str does not have a mapping for virtual space $vs_left_tup. val= $(factors[val])",
+                )
             end
             vs_right_list = keys(op_data[vs_left_tup])
 
             # Filter vs_right_list to only include allowed virtual spaces
-            vs_idx_right_list = [symm_ctx.vsQN_idx_map[vs] for vs in vs_right_list if vs in allowed_vs_right]
-            
+            vs_idx_right_list = [
+                symm_ctx.vsQN_idx_map[vs] for vs in vs_right_list if vs in allowed_vs_right
+            ]
+
             for virtSpace_right in vs_idx_right_list
                 if haskey(vs_right_idx_dict, virtSpace_right)
                     vs_right_offset = vs_right_idx_dict[virtSpace_right]
@@ -330,11 +415,11 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
                     vs_right_offset = length(virtSpaces_right_arr)
                     vs_right_idx_dict[virtSpace_right] = vs_right_offset
                 end
-                
+
                 entry = (vs_left_idx, vs_right_offset, site_op_idx, factors[val])
                 push!(site_entries, entry)
             end
-            
+
         end
         for vs_right_idx in values(vs_right_idx_dict)
             # Add the entry for this column
@@ -342,7 +427,7 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
             push!(new_factor, 1.0)
         end
     end
-    
+
     table = vcat(new_table...)
 
     @assert size(table, 1) == length(new_factor) "Table length ($(length(table))) does not match factor length ($(length(new_factor)))"
@@ -369,24 +454,24 @@ function find_unique_with_inverseMap(arrays)
 
     unique_arrays = Vector{Vector{Int}}()
     inverse_mapping = Int[]
-    
+
     # Use Dict to track unique arrays
-    lookup = Dict{Any, Int}()
-    
+    lookup = Dict{Any,Int}()
+
     for arr in eachrow(arrays)
         # Convert to tuple for hashing in Dict
         key = Tuple(arr)
-        
+
         if !haskey(lookup, key)
             # Found a new unique array
             push!(unique_arrays, copy(arr))
             lookup[key] = length(unique_arrays)
         end
-        
+
         # Record the position in unique_arrays
         push!(inverse_mapping, lookup[key])
     end
-    
+
     return unique_arrays, inverse_mapping
 end
 
@@ -415,35 +500,40 @@ groups operators that map between the same input and output states.
 """
 
 
-function compose_symbolic_site_sparse(site_entries, virtSpace_left, virtSpace_right, idx_localOps_map)
+function compose_symbolic_site_sparse(
+    site_entries,
+    virtSpace_left,
+    virtSpace_right,
+    idx_localOps_map,
+)
     # Use a dictionary to accumulate entries
     # Key: (row, col), Value: Vector of operators
-    entries = Dict{Tuple{Int,Int}, Vector{Tuple{String, Float64}}}()
-    
+    entries = Dict{Tuple{Int,Int},Vector{Tuple{String,Float64}}}()
+
     # For each output operator
     for (vs_left_idx, vs_right_idx, op_idx, factor) in site_entries
         # For each composed operator in this output operator
         position = (vs_left_idx, vs_right_idx)
-        
+
         # Create or retrieve the vector at this position
         if !haskey(entries, position)
-            entries[position] = Tuple{String, Float64}[]
+            entries[position] = Tuple{String,Float64}[]
         end
-        
+
         # Add the operator
         push!(entries[position], (idx_localOps_map[op_idx], factor))
     end
-    
+
     # Create a sparse matrix from the dictionary
     I = Int[]
     J = Int[]
-    V = Vector{Tuple{String, Float64}}[]
-    
+    V = Vector{Tuple{String,Float64}}[]
+
     for ((i, j), ops) in entries
         push!(I, i)
         push!(J, j)
         push!(V, ops)
     end
-    
+
     return SparseArrays.sparse(I, J, V, length(virtSpace_left), length(virtSpace_right))
 end

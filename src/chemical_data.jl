@@ -15,17 +15,17 @@ Parse data contained in `molecule` to generate an input string encoding for HF c
 - `molstr::String`: A formatted string representation of the molecule for quantum chemistry calculations
 """
 function xyz_string(molecule::Molecule)
-  molstr = ""
-  for a in 1:length(molecule)
-    atomname = name(molecule[a])
-    atomcoords = Float64.(coordinates(molecule[a]))
-    molstr *= atomname
-    for r in atomcoords
-      molstr *= " " * string(r)
+    molstr = ""
+    for a = 1:length(molecule)
+        atomname = name(molecule[a])
+        atomcoords = Float64.(coordinates(molecule[a]))
+        molstr *= atomname
+        for r in atomcoords
+            molstr *= " " * string(r)
+        end
+        molstr *= "\n"
     end
-    molstr *= "\n"
-  end
-  return molstr
+    return molstr
 end
 
 """
@@ -40,9 +40,7 @@ Compute Hartree-Fock data for a molecule.
 - Hartree-Fock calculation results including integrals and occupation data
 """
 function molecular_hf_data(molecule::Molecule; kwargs...)
-  return molecular_hf_data(
-    xyz_string(Molecule(molecule)); kwargs...
-  )
+    return molecular_hf_data(xyz_string(Molecule(molecule)); kwargs...)
 end
 
 """
@@ -64,10 +62,21 @@ Compute Hartree-Fock data for a molecule from its string representation.
 - `hf_elec_occ`: Hartree-Fock electron occupation
 - `hf_energy`: Hartree-Fock total energy
 """
-function molecular_hf_data(mol_str::String; basis::String="sto-3g", charge::Union{Py, Int}=PythonCall.Py(nothing), spin::Union{Py, Int}=PythonCall.Py(nothing))
+function molecular_hf_data(
+    mol_str::String;
+    basis::String = "sto-3g",
+    charge::Union{Py,Int} = PythonCall.Py(nothing),
+    spin::Union{Py,Int} = PythonCall.Py(nothing),
+)
     pyscf = PythonCall.pyimport("pyscf")
 
-    mol_obj = pyscf.gto.M(; atom=mol_str, basis=basis, charge=charge, spin=spin, verbose=2)
+    mol_obj = pyscf.gto.M(;
+        atom = mol_str,
+        basis = basis,
+        charge = charge,
+        spin = spin,
+        verbose = 2,
+    )
 
     # Run HF
     mf = pyscf.scf.RHF(mol_obj)
@@ -80,7 +89,13 @@ function molecular_hf_data(mol_str::String; basis::String="sto-3g", charge::Unio
 
     n_orb = size(mo, 1)
     h1e = mo' * hcore_ao * mo
-    h2e = reshape(pyconvert(Array, mol_obj.ao2mo(mf.mo_coeff; aosym=1)), n_orb, n_orb, n_orb, n_orb)
+    h2e = reshape(
+        pyconvert(Array, mol_obj.ao2mo(mf.mo_coeff; aosym = 1)),
+        n_orb,
+        n_orb,
+        n_orb,
+        n_orb,
+    )
 
     # Collect data from HF calculation to return
     h2e = 0.5 * permutedims(h2e, (3, 2, 1, 4))
@@ -112,14 +127,14 @@ Generate Hartree-Fock occupation numbers for a given number of spatial orbitals 
 - `occOrbSpace::Vector{Int}`: Orbital space occupation numbers
 - `occNel::Vector{Int}`: Electron occupation numbers for each orbital
 """
-function get_HF_occ(N_spt::Int, N_el::Int; init_ord::Vector{Int}=collect(1:N_spt))
-    
-    hf_occ = [Fill_HF(init_ord[p], N_el) for p=1:N_spt]
+function get_HF_occ(N_spt::Int, N_el::Int; init_ord::Vector{Int} = collect(1:N_spt))
+
+    hf_occ = [Fill_HF(init_ord[p], N_el) for p = 1:N_spt]
 
     occOrbSpace, occNel = collect(zip(hf_occ...))
-    
+
     return occOrbSpace, occNel
-    
+
 end
 
 """

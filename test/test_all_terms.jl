@@ -17,12 +17,19 @@ ops_tol = 1e-8
 ops_factor = 1
 
 molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
-(; opsum, h1e, h2e, nuc_e) = ITChem_opsum(molecule, n_sites=n_sites, idx_factor_list=nothing, it_terms_range=nothing, ops_tol=ops_tol, ops_factor=ops_factor)
+(; opsum, h1e, h2e, nuc_e) = ITChem_opsum(
+    molecule,
+    n_sites = n_sites,
+    idx_factor_list = nothing,
+    it_terms_range = nothing,
+    ops_tol = ops_tol,
+    ops_factor = ops_factor,
+)
 
-terms = gen_ChemOpSum(h1e, h2e, nuc_e; tol=1e-8)
+terms = gen_ChemOpSum(h1e, h2e, nuc_e; tol = 1e-8)
 
 # Convert to TensorKit MPO
-mpo = chemical_mpo(terms, "U1SU2"; algo="Hungarian", verbose=false)
+mpo = chemical_mpo(terms, "U1SU2"; algo = "Hungarian", verbose = false)
 
 # Convert MPO to matrix
 it_mat = ITChem_mat(opsum)

@@ -62,6 +62,7 @@ The local mpo is the transformation matrix between 0',1',2' to 0'',1''
 
 The local mpo is the transformation matrix between 0'',1'' to 0'''
 
+Source: https://github.com/shuaigroup/Renormalizer/blob/master/renormalizer/mps/symbolic_mpo.py
 """
 
 function construct_symbolic_mpo(table, factors, symm_ctx::AbstractSymmetryContext; algo="Hungarian", verbose=false)
@@ -121,7 +122,6 @@ function construct_symbolic_mpo(table, factors, symm_ctx::AbstractSymmetryContex
         mpoVs[i] = [symm_ctx.idx_vsQN_map[vs_grp] for vs_grp in virtSpace_out]
     end
 
-    # @assert all(length(unique(vs))==1 for vs_grp in mpoVs for vs in vs_grp)
     verbose && println("symbolic MPO's bond dimensions: $([length(vs) for vs in mpoVs])")
     
     return symbolic_mpo, mpoVs
@@ -201,7 +201,9 @@ function _decompose_graph(term_row, term_col, non_red, virtSpace_left_arr, facto
     n_rows, n_cols = size(non_red)
     
     # Use transpose to convert to CSC format and exploit efficient row access
-    non_red_T = SparseArrays.sparse(transpose(non_red))  # Transpose converts CSC to CSR (effectively). TODO: Define it directly in CSR format (:rows as last argument) here by merging the two functions and having access to the inverseMaps. This allocates new data, so it might be better to calculate this in the caller function.
+    # TODO: Consider defining it directly in CSR format here by merging the two functions and having access to the inverseMaps.
+    #       This allocates new data, so it might be better to calculate this in the caller function.
+    non_red_T = SparseArrays.sparse(transpose(non_red))  # Transpose converts CSC to CSR (effectively).
     sparse_rows_T = rowvals(non_red_T)
     sparse_vals_T = nonzeros(non_red_T)
 

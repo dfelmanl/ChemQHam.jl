@@ -1,19 +1,18 @@
-# Main interface for creating chemical MPOs
-# This file provides the high-level interface for creating chemical MPOs
-
 # Define local constant for default symmetry
 const DEFAULT_SYMM = "U1SU2"
 
 """
-    chemical_mpo(op_terms::ChemOpSum; kwargs...)
+    chemical_mpo(op_terms::ChemOpSum, symm_ctx::AbstractSymmetryContext; kwargs...)
 
-Create a chemical MPO from a ChemOpSum.
+Create a chemical MPO from a ChemOpSum with a given symmetry context.
 
 # Arguments
 - `op_terms::ChemOpSum`: Chemical operator sum
-- `symm::String="$DEFAULT_SYMM"`: Symmetry to use
-- `backend::String="TensorKit"`: Backend to use for numerical MPO
+- `symm_ctx::AbstractSymmetryContext`: Symmetry context to use
 - `algo::String="Hungarian"`: Algorithm for symbolic MPO construction
+- `backend::String="TensorKit"`: Backend to use for numerical MPO
+- `merge_physical_idx::Bool=false`: Whether to merge physical indices from multiple with dim=1 into one with dim=4
+- `clockwise_incoming_indices::Bool=false`: Direction of incoming indices. Outgoing indices are always anti-clockwise.
 - `dataType::DataType=Float64`: Data type for numerical tensors
 - `verbose::Bool=false`: Whether to print verbose output
 
@@ -24,8 +23,8 @@ function chemical_mpo(op_terms::ChemOpSum,
                      symm_ctx::AbstractSymmetryContext;
                      algo::String="Hungarian",
                      backend::String="TensorKit",
-                     merge_physical_idx::Bool=true,
-                     clockwise_incoming_indices::Bool=true,
+                     merge_physical_idx::Bool=false,
+                     clockwise_incoming_indices::Bool=false,
                      dataType::DataType=Float64,
                      verbose::Bool=false)
     

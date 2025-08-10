@@ -65,7 +65,6 @@ function Base.show(io::IO, term::OpTerm)
         push!(site_strings, "[ $ops_at_site ]_$site")
     end
     
-    # Join with arrows and add factor
     formatted_term = join(site_strings, " ── ")
     print(io, "$formatted_term    factor = $(term.coefficient)")
 end
@@ -166,9 +165,9 @@ function gen_ChemOpSum(h1e::AbstractArray{Float64}, h2e::AbstractArray{Float64};
     if isnothing(ord)
         if n_sites > 0
             @assert size(h1e, 1) >= n_sites "Provided h1e size $(size(h1e)) does not match n_sites $(n_sites)"
-            ord = collect(1:n_sites)  # Default ordering if n_sites is specified
+            ord = collect(1:n_sites)  # Default site ordering if n_sites is specified
         else
-            ord = collect(1:size(h1e, 1))  # Default ordering if no specific ordering is provided
+            ord = collect(1:size(h1e, 1))  # Default site ordering if no specific ordering is provided
         end
     else
         # Ensure ord is a valid vector of integers
@@ -204,14 +203,16 @@ function _gen_OpSum_SpinSymm(h1e, h2e, nuc_e, ord; tol=1e-14)
 
         if abs(cf) >= tol
             if p + q - 1 <= N_spt # TODO: Check if it improves performance because of the bipartite grouping 
-                os += cf, "a1", p, "c1", q  # Spin-up operators
+                os += cf, "a1", p, "c1", q
             else
-                os += cf, "a2", p, "c2", q  # Spin-down operators
+                os += cf, "a2", p, "c2", q
             end
         end
     end
 
     # Two-interactions terms
+    # Currently runs over half of the indices, takign advantage of the symmetry in the system
+    # TODO: Generalize by running over all coefficients and checking if the term already exists (in a differnet order)
     for p = 1:N_spt, q = p:N_spt, r = 1:N_spt
         if p == q
             s_start = r
@@ -226,7 +227,7 @@ function _gen_OpSum_SpinSymm(h1e, h2e, nuc_e, ord; tol=1e-14)
                 if !(p == q && r == s)
                     cf *= 2
                 end
-                os += cf, "a1", p, "a2", q, "c2", r, "c1", s # check if exists in the dict and flip
+                os += cf, "a1", p, "a2", q, "c2", r, "c1", s
             end
         end
     end

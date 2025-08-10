@@ -13,27 +13,28 @@ println("✓ Molecular HF data calculated")
 @time mpo = chemical_mpo(h1e, h2e, nuc_e; merge_physical_idx=false, clockwise_incoming_indices=false)
 println("✓ MPO constructed")
 
-@time begin
-    mps0_hf = dmrg(mps_hf, mpo)
-    # println("GS MPS HF:", mps0)
-end
-
-# Step 3: HF MPS initialization and DMRG
+# Step 3: HF MPS initialization
 @time begin
     mps_hf = init_mps_hf(hf_orb_occ_basis, hf_elec_occ)
-    # println("MPS HF:", mps_hf)
 end
+println("✓ HF MPS initialized")
 
-# Step 4: Random MPS initialization and DMRG
+# Step 4: DMRG with HF initial guess
+@time begin
+    mps0_hf = dmrg(mps_hf, mpo)
+end
+println("✓ DMRG with HF initialization completed")
+
+# Step 5: Random MPS initialization and DMRG
 @time begin
     mps_r = init_mps_rand(6, 4, 0)
-    # println("MPS Random:", mps_r)
 end
+println("✓ Random MPS initialized")
 
 @time begin
     mps0_r = dmrg(mps_r, mpo)
-    # println("GS MPS Random:", mps0)
 end
+println("✓ DMRG with random initialization completed")
 
 dot = dotMPS(mps0_hf, mps0_r)
 println("Dot product of MPS HF and MPS Random solutions:", dot)

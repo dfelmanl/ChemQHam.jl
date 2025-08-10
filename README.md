@@ -33,8 +33,17 @@ using ChemQHam
 # Define the molecule
 molecule = Molecule([("Li", 0.00, 0.00, 0.0000), ("H", 0.00, 0.00, 1.000)])
 
-# Generates a SparseBlockTensorMap object with [fZ ⊠ U(1) ⊠ SU(2)] symmetry
-mpo = chemical_mpo(molecule)
+# Calculate molecular Hartree-Fock data  
+h1e, h2e, nuc_e, hf_orb_occ_basis, hf_elec_occ, hf_energy = molecular_hf_data(molecule)
+
+# Construct the chemical MPO with [fZ ⊠ U(1) ⊠ SU(2)] symmetry
+mpo = chemical_mpo(h1e, h2e, nuc_e)
+
+# Initialize an MPS with Hartree-Fock occupation
+mps_hf = init_mps_hf(hf_orb_occ_basis, hf_elec_occ)
+
+# Run DMRG to find the ground state
+mps_ground = dmrg(mps_hf, mpo)
 ```
 
 ## Citation

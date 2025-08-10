@@ -11,7 +11,6 @@ using DataStructures
 using PythonCall
 using Combinatorics
 using KrylovKit
-# using MPSKit
 using BlockTensorKit: ⊕
 using TensorKit: space
 
@@ -47,5 +46,8 @@ export init_mps_hf, init_mps_rand, dmrg, dotMPS
 
 # ITensors related exports
 export ITChem_opsum, ITChem_mat
+
+# Additional utility exports
+export xyz_string, get_HF_occ
 
 end

@@ -1,6 +1,3 @@
-# Symmetry context system for ChemQHam
-# This file defines the symmetry context that holds all symmetry-specific information
-
 """
     AbstractSymmetryContext
 
@@ -122,7 +119,6 @@ end
 # Define the U1SU2 local operators
 function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
     """ Generate local operators for the Hamiltonian """
-    # TOCHECK: Should they be defined as the adjoint conjugate? Is that why SpinUp and SpinDown are reversed?
     # Creation and annilihation operator for spin-1/2 multiplet (spinUp and spinDown)
     # Notes:
     # - The orbital basis states are in the following order {|∅>, |↑>, |↓>, |↑↓>}
@@ -151,7 +147,6 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
     # 15: (0, -2, 1)    (-|↑↑> + -|↓↓>) / √2 m=0 (spin pointing in the -Y direction in xy-plane?)
     # 16: (0, -2, 1)    -|↑↑> m=-1
     
-    # New Convention + 3rd multiplicity on (0,0,0) to even the probabilities when constracting on the same site
     virt_space_dict = get_full_virt_space_multiplicities_U1SU2()
     auxVecSpace = Vect[(FermionParity ⊠ Irrep[U₁] ⊠ Irrep[SU₂])](virt_space_dict...)
 
@@ -180,16 +175,16 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
     phySpace = genPhySpace("U1SU2")
     ftree_type = FusionTree{sectortype(typeof(phySpace))}
     crOp = zeros(dataType, auxVecSpace ⊗ phySpace, auxVecSpace ⊗ phySpace)
-    # TODO: Check how can this be inherently defined. Maybe this forces the convention to be changed
+    # TODO: build the operator already with these changes, instead of correcting it afterwards.
     for (f1, f2, ftree_array) in crOp_ftree_nzdata
 
         vs_right = f2[1][1]
 
         if vs_right == (0, 0, 1.0)
-            # Flip sign to the first col (0,0,1)_1 # Solves the addiitonal negative sign to the long cases of caac and acca by flipping signs to (0,0,1)_1 to An2 vs_right and Cr2 vs_left (or viceversa); in order to have anticommutivity in the (0,0,1)_1 virtual space, (+1, -1) with opposite signs
+            # Flip sign to the first col (0,0,1)_1 # Imposes anticommutivity in the (0,0,1)_1 virtual space, i.e. a particle and a hole with opposite signs.
             ftree_array[:,1] *= -1
         elseif vs_right == (0, 0, 0.0)
-            # Flip sign to the second col (0,0,0)_2 # Solves the addiitonal negative sign to the long cases of caac and acca by flipping signs to (0,0,1)_1 to An2 vs_right and Cr2 vs_left (or viceversa); in order to have anticommutivity in the (0,0,1)_1 virtual space, (+1, -1) with opposite signs
+            # Flip sign to the second col (0,0,0)_2 # Imposes anticommutivity in the (0,0,0)_2 virtual space, i.e. a particle and a hole with equal signs.
             ftree_array[:,2] *= -1
         end
 
@@ -222,9 +217,7 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
 
     anOp = zeros(dataType, auxVecSpace ⊗ phySpace, auxVecSpace ⊗ phySpace)
     for (f1, f2, ftree_array) in anOp_ftree_nzdata
-        # Solves the single hopping sign problem in the upper triangular section of the h1e matrix. Now `parity_sign` is not required and properly handled.
-        # Negate right VS for the annihilation operator, i.e. when the creation operator (of the same id -1 in this case-) is on the right.
-        # Positive VS from the right, e.g.(1,1,0.5), do not change sign because there could not have been a creation to the right.
+        # Add a negative sign when the creation operator (of the same id, 1 in this case) is on the right; meaning having a negative U1 QN from the right.
 
         vs_right = f2[1][1]
 
@@ -235,7 +228,7 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
             # Flip sign to the first column (0,0,1)_1
             ftree_array[:,1] *= -1
         elseif vs_right == (1, -1, 0.5)
-            # Flip sign to the first column (1,+-1,0.5)_1
+            # Flip sign to the first column (1,-1,0.5)_1
             ftree_array[:,1] *= -1
         elseif vs_right == (0, -2, 0.0)
             # Flip sign to the first column (0,-2,0)_1
@@ -248,10 +241,10 @@ function get_cr_an_local_ops_U1SU2(; dataType::DataType=Float64)
         
         vs_left = f1[1][1]
         if vs_left == (0, 0, 1.0)
-            # Flip sign to the first row (0,0,1)_1 # Solves the addiitonal negative sign to the long cases of caac and acca by flipping signs to (0,0,1)_1 to An2 vs_right and Cr2 vs_left (or viceversa); in order to have anticommutivity in the (0,0,1)_1 virtual space, (+1, -1) with opposite signs
+            # Flip sign to the first row (0,0,1)_1 # Imposes anticommutivity in the (0,0,1)_1 virtual space, i.e. a particle and a hole with opposite signs.
             ftree_array[1,:] *= -1
         elseif vs_left == (0, 0, 0.0)
-            # Flip sign to the second row (0,0,0)_1 # Solves the addiitonal negative sign to the long cases of caac and acca by flipping signs to (0,0,1)_1 to An2 vs_right and Cr2 vs_left (or viceversa); in order to have anticommutivity in the (0,0,1)_1 virtual space, (+1, -1) with opposite signs
+            # Flip sign to the second row (0,0,0)_1 # Imposes anticommutivity in the (0,0,0)_1 virtual space, i.e. a particle and a hole with equal signs.
             ftree_array[2,:] *= -1
         end
         
@@ -332,8 +325,8 @@ end
 
 # Define the U1U1 local operators
 function get_cr_an_local_ops_U1U1(; dataType::DataType=Float64, spin_symm::Bool=false)
+    # Currently the U1U1 symmetry is not supported.
     """ Generate local operators for the Hamiltonian """
-    # TOCHECK: Should they be defined as the adjoint conjugate? Is that why SpinUp and SpinDown are reversed?
     # Creation and annilihation operator for spin-1/2 multiplet (spinUp and spinDown)
     # Notes:
     # - The orbital basis states are in the following order {|∅>, |↑>, |↓>, |↑↓>}
@@ -640,13 +633,10 @@ function ftree_inner_data(ftree)
     data = []
     for (qn, sector) in zip(sectors_qn, ftree.sectors)
         if qn == :isodd
-            # push!(data, convert(Int, sector.isodd))
             push!(data, sector.isodd)
         elseif qn == :charge
-            # push!(data, convert(Int, sector.charge))
             push!(data, sector.charge)
         elseif qn == :j
-            # push!(data, convert(Float64, sector.j))
             push!(data, sector.j)
         else
             throw(ArgumentError("Unsupported sector type: $sector"))
@@ -724,16 +714,18 @@ function Base.getindex(lo2V::LocalOps_SpinSymm, key::String)
     if key == "I"
         return lo2V.base_ops["I"]
     elseif key == "c1"
+        # Creation operator with ID=1.
         return lo2V.base_ops["c"]
     elseif key == "c2"
+        # Creation operator with ID=2.
+        # We distinguish between the two creation operators by their id and ensure that they are properly antisymmetrized.
         c = copy(lo2V.base_ops["c"])
 
         # Check the codomain's parity. If it's zero, then the domain's must be one (and vice versa).
         # We swap the (2-sized) dimension where parity is 1. This is in order to match the id=2 operator to the second (1,1,0.5) multiplicity.
         # Then, in order to add anticommutivity between the operators with id 1 and 2:
-        #    - Add a negative sign to the second multiplicity of the (0,0,0) sector, which represents (1,-1) or (-1,1) in the virtual IDs quantum numbers with the same spin.
-        #    - Add a negative sign to the (0,+-2,0) sector to distinguish between the (1,1) cases with opposite spins.
-        #    - Add a negative sign to the (0,2,0) sector to distinguish between the (1,1) cases with opposite spins.
+        #    - Add a negative sign to the second multiplicity of the (0,0,0) sector, which represents a particle and a hole with the same spin for the two virtual IDs.
+        #    - Add a negative sign to the (0,+-2,1) sector to anticommute its two possible constructions from virtual particles with different IDs but with the same spin.
         for (f1, f2) in fusiontrees(c)
             ftree_array = c[f1,f2]
             if !iszero(ftree_array)

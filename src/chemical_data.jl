@@ -3,8 +3,17 @@ using ITensorChemistry
 name(atom::Atom) = atom.name
 coordinates(atom::Atom) = atom.coordinates
 
-# parse data contained in `mol` to generate
-# an input string encoding for HF in Fermi.jl
+"""
+    xyz_string(molecule::Molecule)
+
+Parse data contained in `molecule` to generate an input string encoding for HF calculation.
+
+# Arguments
+- `molecule::Molecule`: The molecule object containing atoms and their coordinates
+
+# Returns
+- `molstr::String`: A formatted string representation of the molecule for quantum chemistry calculations
+"""
 function xyz_string(molecule::Molecule)
   molstr = ""
   for a in 1:length(molecule)
@@ -19,12 +28,42 @@ function xyz_string(molecule::Molecule)
   return molstr
 end
 
+"""
+    molecular_hf_data(molecule::Molecule; kwargs...)
+
+Compute Hartree-Fock data for a molecule.
+
+# Arguments
+- `molecule::Molecule`: The molecule object
+
+# Returns
+- Hartree-Fock calculation results including integrals and occupation data
+"""
 function molecular_hf_data(molecule::Molecule; kwargs...)
   return molecular_hf_data(
     xyz_string(Molecule(molecule)); kwargs...
   )
 end
 
+"""
+    molecular_hf_data(mol_str::String; basis="sto-3g", charge=nothing, spin=nothing)
+
+Compute Hartree-Fock data for a molecule from its string representation.
+
+# Arguments
+- `mol_str::String`: String representation of the molecule geometry
+- `basis::String="sto-3g"`: Basis set to use for the calculation
+- `charge::Union{Py, Int}=PythonCall.Py(nothing)`: Molecular charge
+- `spin::Union{Py, Int}=PythonCall.Py(nothing)`: Molecular spin
+
+# Returns
+- `h1e`: One-electron integrals in molecular orbital basis
+- `h2e`: Two-electron integrals in molecular orbital basis  
+- `nuc_e`: Nuclear repulsion energy
+- `hf_orb_occ_basis`: Hartree-Fock orbital occupation basis
+- `hf_elec_occ`: Hartree-Fock electron occupation
+- `hf_energy`: Hartree-Fock total energy
+"""
 function molecular_hf_data(mol_str::String; basis::String="sto-3g", charge::Union{Py, Int}=PythonCall.Py(nothing), spin::Union{Py, Int}=PythonCall.Py(nothing))
     pyscf = PythonCall.pyimport("pyscf")
 
@@ -60,16 +99,18 @@ function molecular_hf_data(mol_str::String; basis::String="sto-3g", charge::Unio
 end
 
 """
-    getHFocc(chem_data)
+    get_HF_occ(N_spt::Int, N_el::Int; init_ord::Vector{Int}=collect(1:N_spt))
 
-Generate Hartree-Fock occupation numbers for a given chemical data.
+Generate Hartree-Fock occupation numbers for a given number of spatial orbitals and electrons.
 
 # Arguments
-- `chem_data::ChemData`: A structure containing chemical data, including the number of spatial orbitals (`N_spt`) and the number of electrons (`N_el`).
+- `N_spt::Int`: Number of spatial orbitals
+- `N_el::Int`: Number of electrons
+- `init_ord::Vector{Int}=collect(1:N_spt)`: Initial orbital ordering
 
 # Returns
-- `occOrbSpace::Vector{Int}`: A vector containing the first elements of the Hartree-Fock occupation numbers.
-- `occNel::Vector{Int}`: A vector containing the second elements of the Hartree-Fock occupation numbers.
+- `occOrbSpace::Vector{Int}`: Orbital space occupation numbers
+- `occNel::Vector{Int}`: Electron occupation numbers for each orbital
 """
 function get_HF_occ(N_spt::Int, N_el::Int; init_ord::Vector{Int}=collect(1:N_spt))
     
@@ -81,7 +122,22 @@ function get_HF_occ(N_spt::Int, N_el::Int; init_ord::Vector{Int}=collect(1:N_spt
     
 end
 
-# Return HF filling tuple (orbitalPhysicalSpace basis, electron count) of the spatial orbital i occupation dependent on the electron number.
+"""
+    Fill_HF(i, nel)
+
+Return Hartree-Fock filling tuple (orbital physical space basis, electron count) 
+for spatial orbital i based on the total electron number.
+
+# Arguments
+- `i::Int`: Spatial orbital index
+- `nel::Int`: Total number of electrons
+
+# Returns
+- Tuple of (orbital_space_state, electron_count) for the given orbital. Where the orbital states are: 
+  - 4: Fully occupied (2 electrons, one spin-up and one spin-down)
+  - 2: Half-occupied (1 electron, chosen to be spin-up). 3 would be spin-down, but the decision is arbitrary and does not affect the computation.
+  - 1: Unoccupied (0 electrons)
+"""
 function Fill_HF(i, nel)
     if 2*i <= nel
         return 4, 2

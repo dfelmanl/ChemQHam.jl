@@ -1,12 +1,6 @@
 # This is a temporary file for a DMRG implementation that uses BlockTensorMap and SparseBlockTensorMap.
 # It is based on a private repository by Dr. Philipp Schmoll (https://github.com/philihps) and it was adapted for the current project.
 
-# using HTTN
-# using KrylovKit
-# using MPSKit
-# using Printf
-# using BlockTensorKit: ⊕
-
 @kwdef struct DMRGCONFIG
     bondDim::Int64 = 10
     truncErr::Float64 = 1e-8
@@ -14,61 +8,42 @@
     eigsTol::Float64 = 1e-12
     maxIterations::Int64 = 10
     subspaceExpansion::Bool = true
-    verbose::Bool = false
     maxSweeps::Int64 = 10
-    ovlpPenalty::Float64 = 2.0
+    verbose::Bool = false
 end
 
-# function initDMRG(mps::Vector{SparseBlockTensorMap}, H_mpo::Vector{SparseBlockTensorMap}; dmrg_sweeps::Int=10, ovlp_opt::Bool=false,
-# ovlp_weight::Float64=2.0, phis::Vector{SparseMPS}=SparseMPS[], mps_maxdim::Int=32, truncErr::Float64=1e-8, verbose::Bool=false)
-function dmrg(mps::Vector{BlockTensorMap}, H_mpo::Vector{SparseBlockTensorMap}; dmrg_sweeps::Int=10, ovlp_opt::Bool=false,
-                ovlp_weight::Float64=2.0, phis::Vector{Vector{BlockTensorMap}}=Vector{BlockTensorMap}[], mps_maxdim::Int=32, truncErr::Float64=1e-8, verbose::Bool=false)
+function dmrg(mps::Vector{BlockTensorMap}, H_mpo::Vector{SparseBlockTensorMap}; dmrg_sweeps::Int=10,
+                mps_maxdim::Int=32, truncErr::Float64=1e-8, verbose::Bool=false)
     """
     Initialize MPS with DMRG.
     """
 
-    if ovlp_opt && length(phis) > 0
-        mps, energy, er = find_excitedstate(mps, H_mpo, phis,
+    # Take DMRGCONFIG definition to the main script and apply dmrg at a higher level, as it doesn't depend on hf_init
+    mps, gsE = find_groundstate_wMaxdim(mps, H_mpo,
                         DMRGCONFIG(; bondDim = mps_maxdim,
-                        truncErr = 0., # truncErr=0. means truncation is only done by maxdim
-                        verbose = verbose,
+                        truncErr = truncErr, # truncErr=0. means truncation is only done by maxdim
                         maxSweeps = dmrg_sweeps,
-                        ovlpPenalty = ovlp_weight
+                        verbose = verbose
                         ))
-    else
-        # Take DMRGCONFIG definition to the main script and apply dmrg at a higher level, as it doesn't depend on hf_init
-        mps, gsE = find_groundstate_wMaxdim(mps, H_mpo,
-                            DMRGCONFIG(; bondDim = mps_maxdim,
-                            truncErr = truncErr, # truncErr=0. means truncation is only done by maxdim
-                            verbose = verbose,
-                            maxSweeps = dmrg_sweeps
-                            ))
-    end
+
 
     return mps
 end
 
-
-# Redefine HTTN's find_groundstate to ignore truncation by tolerance (and fix bond dimensions)
-
-# function find_groundstate_wMaxdim(finiteMPS::Vector{SparseBlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap}, alg::DMRGCONFIG)
-function find_groundstate_wMaxdim(finiteMPS::Vector{BlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap}, alg::DMRGCONFIG; dataType::DataType=Float64)
-    # dataType = eltype(finiteMPS[1].data)
-    # @assert dataType == eltype(finiteMPO[1].data) "Unmatched: data from mps: $(typeof(finiteMPS[1].data)) and mpo: $(typeof(finiteMPO[1].data))"
+function find_groundstate_wMaxdim(finiteMPS::Vector{BlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap}, alg::DMRGCONFIG)
+    dataType = eltype(first(finiteMPS[1].data))
+    @assert dataType == eltype(first((values(finiteMPO[1].data)))) "Unmatched: data from mps: $(typeof(finiteMPS[1].data)) and mpo: $(typeof(finiteMPO[1].data))"
     return find_groundstate_wMaxdim!(copy(finiteMPS), finiteMPO, alg; dataType=dataType)
 end
 
-# function find_groundstate_wMaxdim!(finiteMPS::Vector{SparseBlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap}, alg::DMRGCONFIG; dataType::DataType=Float64)
 function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap}, alg::DMRGCONFIG; dataType::DataType=Float64)
 
     truncMethod = alg.truncErr > 0. ? truncdim(alg.bondDim) & truncerr(alg.truncErr) : truncdim(alg.bondDim)
 
     # apply finiteMPO to finiteMPS to introduce QNs that cannot be introduced by a regular 2-site update due to different local Hilbert spaces
     if alg.subspaceExpansion
-        finiteMPS = applyMPO(finiteMPO, finiteMPS; maxDim=alg.bondDim, truncErr=alg.truncErr, # TO IMPLEMENT: split maxDim and truncErr between applyMPO and find_groundstate
-                             compressionAlg = "zipUp")
+        finiteMPS = applyMPO(finiteMPO, finiteMPS; maxDim=alg.bondDim, truncErr=alg.truncErr) # TO IMPLEMENT: split maxDim and truncErr between applyMPO and find_groundstate # compressionAlg = "zipUp")
     end
-    # alg.verbose && println("MPS Spaces:\n $(space(finiteMPS[1]))\n $(space(finiteMPS[2]))\n $(space(finiteMPS[3]))\n $(space(finiteMPS[4]))\n $(space(finiteMPS[5]))\n $(space(finiteMPS[6]))")
 
     # initialize mpsEnergy
     mpsEnergy = Float64[1.0]
@@ -139,17 +114,13 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
 
                 # compute error
                 v = @tensor theta[1, 2, 3, 4] * conj(U[1, 2, 5]) * conj(V[5, 3, 4])
-                # ϵs[siteIdx] = max(ϵs[siteIdx], abs(1 - abs(v)));
                 ϵs[siteIdx] = abs(1 - abs(v))
 
                 # assign updated tensors and update MPO environments
-                # finiteMPS[siteIdx + 0] = SparseBlockTensorMap(U)
-                # finiteMPS[siteIdx + 1] = SparseBlockTensorMap(V)
                 finiteMPS[siteIdx + 0] = BlockTensorMap(U)
                 finiteMPS[siteIdx + 1] = BlockTensorMap(V)
 
                 # update mpoEnvL
-                # mpoEnvL[siteIdx + 1] = SparseBlockTensorMap(HTTN.update_MPOEnvL(mpoEnvL[siteIdx],
                 mpoEnvL[siteIdx + 1] = SparseBlockTensorMap(update_MPOEnvL(mpoEnvL[siteIdx],
                                                       finiteMPS[siteIdx],
                                                       finiteMPO[siteIdx],
@@ -166,13 +137,11 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
                                 (3, 4))
 
                 # optimize wave function to get newAC
-                # eigenVal, eigenVec = HTTN.eigsolve(theta,
                 eigenVal, eigenVec = eigsolve(theta,
                                               1,
                                               :SR,
                                               KrylovKit.Lanczos(; tol = alg.eigsTol,
                                                                 maxiter = alg.maxIterations)) do x
-                    # return HTTN.applyH2(x,
                     return applyH2(x,
                                    mpoEnvL[siteIdx],
                                    finiteMPO[siteIdx],
@@ -195,17 +164,13 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
 
                 # compute error
                 v = @tensor theta[1, 2, 3, 4] * conj(U[1, 2, 5]) * conj(V[5, 3, 4])
-                # ϵs[siteIdx] = max(ϵs[siteIdx], abs(1 - abs(v)));
                 ϵs[siteIdx] = abs(1 - abs(v))
 
                 # assign updated tensors and update MPO environments
-                # finiteMPS[siteIdx + 0] = SparseBlockTensorMap(U)
-                # finiteMPS[siteIdx + 1] = SparseBlockTensorMap(V)
                 finiteMPS[siteIdx + 0] = BlockTensorMap(U)
                 finiteMPS[siteIdx + 1] = BlockTensorMap(V)
 
                 # update mpoEnvR
-                # mpoEnvR[siteIdx + 0] = SparseBlockTensorMap(HTTN.update_MPOEnvR(mpoEnvR[siteIdx + 1],
                 mpoEnvR[siteIdx + 0] = SparseBlockTensorMap(update_MPOEnvR(mpoEnvR[siteIdx + 1],
                                                       finiteMPS[siteIdx + 1],
                                                       finiteMPO[siteIdx + 1],
@@ -223,8 +188,6 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
 
             # check convergence of ground state energy
             energyConvergence = abs(mpsEnergy[end - 1] - mpsEnergy[end])
-            # energyConvergenceA = norm(newEigsEnergies .- oldEigsEnergies) / length(finiteMPS);
-            # display([energyConvergence energyConvergenceA maximum(ϵs)])
             alg.verbose > 0 &&
                 println("DMRG step $(loopCounter) ; energy = $(round(mpoExpVal, digits=8)) ; convergence = $(round(energyConvergence, digits=8))")
             if energyConvergence < alg.convTolE || loopCounter >= alg.maxSweeps
@@ -233,7 +196,6 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
 
             # increase loopCounter and update oldEigsEnergies
             loopCounter += 1
-            # oldEigsEnergies = copy(newEigsEnergies);
 
         end
 
@@ -251,8 +213,7 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
         #                                        domain(finiteMPS[idxMPS]))
         #         end
         #         finiteMPS = normalizeMPS(finiteMPS)
-        #         finiteMPS = applyMPO(finiteMPO, finiteMPS; maxDim=alg.bondDim, truncErr=alg.truncErr,
-        #                              compressionAlg = "zipUp")
+        #         finiteMPS = applyMPO(finiteMPO, finiteMPS; maxDim=alg.bondDim, truncErr=alg.truncErr) #, compressionAlg = "zipUp")
         #     else
         #         runOptimization = false
         #     end
@@ -271,7 +232,6 @@ function find_groundstate_wMaxdim!(finiteMPS::Vector{BlockTensorMap}, finiteMPO:
     return finiteMPS, finalEnergy, ϵs
 end
 
-# function initializeMPOEnvironments(finiteMPS::Vector{SparseBlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap};
 function initializeMPOEnvironments(finiteMPS::Vector{BlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap};
                                    centerPos::Int64 = 1, dataType::DataType=Float64)
 
@@ -311,32 +271,26 @@ function update_MPOEnvR(mpoEnvR, mpsTensorK, mpoTensor, mpsTensorB)
     return newER
 end
 
-# function variance_mpo(finiteMPS::Vector{SparseBlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap}; trunc_err = 1e-6)
 function variance_mpo(finiteMPS::Vector{BlockTensorMap}, finiteMPO::Vector{SparseBlockTensorMap}; trunc_err = 1e-6)
 
     # copy finiteMPS
     myMPS = copy(finiteMPS)
 
     # compute H|ψ⟩
-    finiteMPOMPS = applyMPO(finiteMPO, myMPS; truncErr = trunc_err, compressionAlg = "zipUp")
+    finiteMPOMPS = applyMPO(finiteMPO, myMPS; truncErr = trunc_err)
 
 
     # compute E = ⟨ψ|H|ψ⟩
-    # mpsEnergy = HTTN.dotMPS(myMPS, finiteMPOMPS)
     mpsEnergy = dotMPS(myMPS, finiteMPOMPS)
 
     # compute |ϕ⟩ = H|ψ⟩ - E|ψ⟩
     phiMPS = finiteMPOMPS - mpsEnergy * myMPS
 
     # compute variance as ⟨ϕ|ϕ⟩
-    # energyVariance = abs(real(HTTN.dotMPS(phiMPS, phiMPS)))
     energyVariance = abs(real(dotMPS(phiMPS, phiMPS)))
     return energyVariance
 end
 
-# function HTTN.dotMPS(mpsA::Vector{SparseBlockTensorMap}, mpsB::Vector{SparseBlockTensorMap})
-# function HTTN.dotMPS(mpsA::Vector{T}, mpsB::Vector{T}) where T <: SparseBlockTensorMap
-# function HTTN.dotMPS(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap})
 function dotMPS(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap})
     """ Compute the inner product < mpsA | mpsB > """
     """ Compute the overlap < mpsA | mpsB > """
@@ -358,11 +312,9 @@ end
 
 
 function applyMPO(finiteMPO::Vector{SparseBlockTensorMap},
-                #   finiteMPS::Vector{SparseBlockTensorMap};
                   finiteMPS::Vector{BlockTensorMap};
                   truncErr::Float64 = 1e-6,
-                  maxDim::Int64 = 2500,
-                  compressionAlg::String = "variationalContraction",)
+                  maxDim::Int64 = 2500)
     """ Applies finiteMPO to finiteMPS and compressed the MPS to bond dimension 'maxDim' """
     """ Algorithm 'densityMatrix' is exact, algorithm 'zipUp' is faster but less accurate """
 
@@ -371,8 +323,6 @@ function applyMPO(finiteMPO::Vector{SparseBlockTensorMap},
 
     # get length of finiteMPS
     N = length(compressedMPS)
-    
-    @assert compressionAlg == "zipUp"
 
     # construct left and right isomorphism
     isomoL = isomorphism(fuse(space(compressedMPS[1], 1), space(finiteMPO[1], 1)),
@@ -391,9 +341,7 @@ function applyMPO(finiteMPO::Vector{SparseBlockTensorMap},
                             (3, 4));
                             trunc = truncdim(maxDim) & truncerr(truncErr), #to prevent an error for space mismatch
                             alg = TensorKit.SVD(),)
-            # U, S, V = tsvd(localTensor, (1, 2), (3, 4), trunc = truncerr(truncErr), alg = TensorKit.SVD());
              compressed_mps= TensorKit.permute(U, ((1, 2), (3,)))
-            #  compressedMPS[siteIdx] = SparseBlockTensorMap(compressed_mps)
              compressedMPS[siteIdx] = BlockTensorMap(compressed_mps)
             isomoL = S * V
         else
@@ -403,32 +351,27 @@ function applyMPO(finiteMPO::Vector{SparseBlockTensorMap},
                                                             finiteMPO[siteIdx][3, -2, 5,
                                                                             2] *
                                                             isomoR[4, 5, -3]
-            # compressedMPS[siteIdx] = SparseBlockTensorMap(compressed_mps)
             compressedMPS[siteIdx] = BlockTensorMap(compressed_mps)
         end
     end
 
     # orthogonalize MPS
-    orthogonalizeMPS!(compressedMPS, 1)
+    orthogonalizeMPS!(compressedMPS)
 
     
     return compressedMPS
 end
 
-# function orthogonalizeMPS!(mps::Vector{SparseBlockTensorMap}, centerPos::Int64 = 1)
-function orthogonalizeMPS!(mps::Vector{BlockTensorMap}, centerPos::Int64 = 1)
+function orthogonalizeMPS!(mps::Vector{BlockTensorMap})
     for siteIdx in length(mps):-1:1
         (L, Q) = rightorth(mps[siteIdx], ((1,), (2, 3)); alg = LQpos())
         # normalizeMPS && normalize!(L)
         if siteIdx > 1
-            # mps[siteIdx - 1] = SparseBlockTensorMap(TensorKit.permute(TensorKit.permute(mps[siteIdx - 1],
             mps[siteIdx - 1] = BlockTensorMap(TensorKit.permute(TensorKit.permute(mps[siteIdx - 1],
                                                 ((1, 2),
                                                 (3,))) * L, ((1, 2), (3,))))
-            # mps[siteIdx - 0] = SparseBlockTensorMap(TensorKit.permute(Q, ((1, 2), (3,))))
             mps[siteIdx - 0] = BlockTensorMap(TensorKit.permute(Q, ((1, 2), (3,))))
         else
-            # mps[siteIdx - 0] = SparseBlockTensorMap(TensorKit.permute(L * TensorKit.permute(Q, ((1,), (2, 3))),
             mps[siteIdx - 0] = BlockTensorMap(TensorKit.permute(L * TensorKit.permute(Q, ((1,), (2, 3))),
                                                 ((1, 2),
                                                 (3,))))
@@ -438,7 +381,6 @@ end
 
 
 # addition
-# function Base.:+(mpsA::Vector{SparseBlockTensorMap}, mpsB::Vector{SparseBlockTensorMap})
 function Base.:+(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap})
 
     # get length of MPSs
@@ -448,7 +390,6 @@ function Base.:+(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap})
         throw(DimensionMismatch("lengths of MPS A ($NA) and MPS B ($NB) do not match"))
 
     # add MPSs from left to right
-    # MPSC = Vector{SparseBlockTensorMap}(undef, NA)
     MPSC = Vector{BlockTensorMap}(undef, NA)
     if NA == 1
 
@@ -465,7 +406,6 @@ function Base.:+(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap})
         isoRB = rightnull(isoRA)
         @tensor newTensor[-1 -2; -3] := mpsA[idxMPS][-1, -2, 3] * isoRA[3, -3] +
                                         mpsB[idxMPS][-1, -2, 3] * isoRB[3, -3]
-        # MPSC[idxMPS] = SparseBlockTensorMap(newTensor)
         MPSC[idxMPS] = BlockTensorMap(newTensor)
 
         # bulk tensors
@@ -480,7 +420,6 @@ function Base.:+(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap})
                                             isoRA[3, -3] +
                                             isoLB[-1, 1] * mpsB[idxMPS][1, -2, 3] *
                                             isoRB[3, -3]
-            # MPSC[idxMPS] = SparseBlockTensorMap(newTensor)
             MPSC[idxMPS] = BlockTensorMap(newTensor)
         end
 
@@ -491,22 +430,17 @@ function Base.:+(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap})
         isoLB = leftnull(isoLA)
         @tensor newTensor[-1 -2; -3] := isoLA[-1, 1] * mpsA[idxMPS][1, -2, -3] +
                                         isoLB[-1, 1] * mpsB[idxMPS][1, -2, -3]
-        # MPSC[idxMPS] = SparseBlockTensorMap(newTensor)
         MPSC[idxMPS] = BlockTensorMap(newTensor)
     end
-    # return SparseMPS(MPSC)
     return MPSC
 end
-# Base.:-(mpsA::Vector{SparseBlockTensorMap}, mpsB::Vector{SparseBlockTensorMap}) = mpsA + (-1 * mpsB)
 Base.:-(mpsA::Vector{BlockTensorMap}, mpsB::Vector{BlockTensorMap}) = mpsA + (-1 * mpsB)
 
-# function Base.:*(ψ::Vector{SparseBlockTensorMap}, b::Number)
 function Base.:*(ψ::Vector{BlockTensorMap}, b::Number)
     newTensors = copy(ψ)
     newTensors[1] *= b
     return newTensors
 end
-# Base.:*(b::Number, ψ::Vector{SparseBlockTensorMap}) = ψ * b
 Base.:*(b::Number, ψ::Vector{BlockTensorMap}) = ψ * b
 
 

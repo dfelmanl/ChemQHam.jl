@@ -46,10 +46,10 @@ function fill_mpo_site_SU2!(sblock_site, symb_mpo_site, vs_left, vs_right, symm_
 
             for (ftree_left, ftree_right, val) in op_data
 
-                ps_out = ftree_left[1][2] # physical sector out
-                ps_right = ftree_right[1][2] # physical sector in
+                ps_left = ftree_left[1][2]
+                ps_right = ftree_right[1][2]
 
-                phy_l = physical_abs_offsets[ps_out]
+                phy_l = physical_abs_offsets[ps_left]
                 phy_r = physical_abs_offsets[ps_right]
 
                 sp_coordinates = (row, phy_l, col, phy_r)

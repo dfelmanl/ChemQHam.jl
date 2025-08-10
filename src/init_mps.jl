@@ -1,8 +1,16 @@
 
-function init_mps_hf(occHF_orbBasis, occHF_elCnt; symm::String="U1SU2", dataType::DataType=Float64)
+function init_mps_hf(occHF_orbBasis, occHF_elCnt; symm::String="U1SU2", dataType::DataType=Float64)::Vector{BlockTensorMap}
+    # Initialize a Hartree Fock state MPS, which is a product state (bond dimension 1).
+    # Returns a vector of BlockTensorMaps representing the MPS tensors.
+    # TODO: Evaluate building a vector of SparseBlockTensorMaps (applying dropzeros! to each tensor)
     """
     Initialize a Hartree Fock state MPS, which is a product state (bond dimension 1).
     """
+    # Input validation
+    if length(occHF_orbBasis) != length(occHF_elCnt)
+        error("Length mismatch: occHF_orbBasis ($(length(occHF_orbBasis))) and occHF_elCnt ($(length(occHF_elCnt))) must have the same length (number of spatial orbitals)")
+    end
+    
     phy_sumspace = genFlattenedPhySpace(symm)
     N_spt = length(occHF_orbBasis)
     # construct virtual vector spaces for the MPS
@@ -23,15 +31,13 @@ function init_mps_hf(occHF_orbBasis, occHF_elCnt; symm::String="U1SU2", dataType
         end
     end
     
-    # create new classical product state from mpsSample
-    # initialTensors = Vector{SparseBlockTensorMap}(undef, N_spt)
     initialTensors = Vector{BlockTensorMap}(undef, N_spt)
     for siteIdx in 1:N_spt
         virtSpaceL = virtSpaces[siteIdx]
         virtSpaceR = virtSpaces[siteIdx + 1]
 
         block_space = virtSpaceL ⊗ phy_sumspace ← virtSpaceR
-        btm = zeros(block_space)
+        btm = zeros(dataType, block_space)
 
         physical_offset = occHF_orbBasis[siteIdx] == 4 ? 3 : occHF_orbBasis[siteIdx]
         idxs = CartesianIndex(1, physical_offset, 1)
@@ -39,19 +45,14 @@ function init_mps_hf(occHF_orbBasis, occHF_elCnt; symm::String="U1SU2", dataType
         ftree_tm = TensorMap([1.], space(btm[idxs]))
         btm.data[idxs] = ftree_tm
         
-        # spbTM=SparseBlockTensorMap(btm)
-        # BlockTensorKit.dropzeros!(spbTM)
-        # initialTensors[siteIdx] = spbTM
-        
         initialTensors[siteIdx] = btm
 
     end
-    # return SparseMPS(initialTensors; normalizeMPS = true)
     return initialTensors
 end
 
 function init_mps_rand(N_spt::Int, N_el::Int, spin; symm::String="U1SU2", removeDegeneracy::Bool=true, dataType::DataType=Float64)
-    # Think about better ways to cutoff virtual BD states: with randomization / including different states accross MPSs
+    # TODO: Think about better ways to cutoff virtual BD states: with randomization / including different states accross MPSs
     """
     Initialize a random MPS with all bond dimensions.
     """
@@ -76,7 +77,6 @@ function init_mps_rand(N_spt::Int, N_el::Int, spin; symm::String="U1SU2", remove
                                         virtSpaces[siteIdx + 1])
     end
 
-    # return SparseMPS(initialTensors; normalizeMPS = true) it will get normalized by FiniteMPS
     return initialTensors
 end
 
@@ -112,19 +112,8 @@ function constructVirtSpaces(in_virtSpaces::Vector{V}, N_spt::Int, qnL::V, qnR::
     end
 
     # combine virtual vector spaces
-    # virtSpaces = [infimum(virtSpaces_L[siteIdx], virtSpaces_R[siteIdx])
-    #               for siteIdx in 1:(N_spt + 1)]
-
-    # combine virtual vector spaces
     virtSpaces = Vector{V}(undef, N_spt + 1)
     for siteIdx in 1:(N_spt + 1)
-        println("Site $siteIdx:")
-        println("  virtSpaces_L type: ", typeof(virtSpaces_L[siteIdx]))
-        println("  virtSpaces_R type: ", typeof(virtSpaces_R[siteIdx]))
-        println("  virtSpaces_L: ", virtSpaces_L[siteIdx])
-        println("  virtSpaces_R: ", virtSpaces_R[siteIdx])
-        println("  infimum type: ", typeof(infimum(virtSpaces_L[siteIdx], virtSpaces_R[siteIdx])))
-        println("  infimum: ", infimum(virtSpaces_L[siteIdx], virtSpaces_R[siteIdx]))
         virtSpaces[siteIdx] = infimum(virtSpaces_L[siteIdx], virtSpaces_R[siteIdx])
     end
 
@@ -158,24 +147,11 @@ function removeDegeneracyQN(vecSpace; degenCutOff::Int64 = 1)
     return truncatedVectorSpace
 end
 
-# function removeDegeneracyQN(vecSpace; degenCutOff::Int64 = 1)
-#     """ Function to remove degeneracies of QNs """
-
-#     truncatedVectorSpaces = typeof(vecSpace.spaces)(undef, length(vecSpace.spaces))
-#     for (i, space) in enumerate(vecSpace.spaces)
-#         qnSectors = space.dims
-#         truncatedVectorSpace = typeof(space)([key => min(qnSectors[key], degenCutOff) for key in keys(qnSectors)])
-#         truncatedVectorSpaces[i] = truncatedVectorSpace
-#     end
-#     return SumSpace(truncatedVectorSpaces)
-# end
-
 function sumSpace_to_gradedSpace(vs_ss::SumSpace)
     """
     Convert a SumSpace to a GradedSpace.
     """
-    # This function assumes that the SumSpace is already truncated
-    # and has no degeneracies.
+    # This function assumes that the SumSpace is already truncated and has no degeneracies.
     
     qn_mults = Dict{ProductSector, Int64}()
     for (i, space) in enumerate(vs_ss.spaces)

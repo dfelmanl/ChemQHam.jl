@@ -6,8 +6,6 @@
 
 A Julia package for optimal quantum chemistry Hamiltonian construction in matrix product operator (MPO) form.
 
-⚠️ **This package is currently under active development** ⚠️
-
 ## Features
 
 - **Chemical Operator Sum Generation**: Convert quantum chemistry integrals to operator sums
